@@ -18,7 +18,7 @@
 
 1. 下載專案程式碼並切換到專案資料夾：
    ```bash
-   git clone <repository-url>
+   git clone <[repository-url](https://github.com/kylekyl-khan/FastAPIProject)>
    cd FastAPIProject
    ```
 
