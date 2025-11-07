@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <system.webServer>
+    <handlers>
+      <add name="PythonHandler" path="*" verb="*" 
+           modules="FastCgiModule" 
+           scriptProcessor="D:\fastApiProject1\venv\Scripts\python.exe|D:\fastApiProject1\venv\Lib\site-packages\wfastcgi.py" 
+           resourceType="Unspecified" 
+           requireAccess="Script" />
+    </handlers>
+    
+    <!-- 静态文件处理 -->
+    <staticContent>
+      <mimeMap fileExtension=".woff" mimeType="application/font-woff" />
+      <mimeMap fileExtension=".woff2" mimeType="application/font-woff2" />
+    </staticContent>
+    
+    <!-- HTTP 重定向到 HTTPS -->
+    <rewrite>
+      <rules>
+        <rule name="HTTP to HTTPS redirect" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions>
+            <add input="{HTTPS}" pattern="off" ignoreCase="true" />
+          </conditions>
+          <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" 
+                  redirectType="Permanent" />
+        </rule>
+      </rules>
+    </rewrite>
+  </system.webServer>
+  
+  <appSettings>
+    <!-- WSGI 处理器 -->
+    <add key="WSGI_HANDLER" value="main.app" />
+    
+    <!-- Python 路径 -->
+    <add key="PYTHONPATH" value="D:\fastApiProject1" />
+    
+    <!-- 虚拟环境路径 -->
+    <add key="PYTHONHOME" value="D:\fastApiProject1\venv" />
+    
+    <!-- 启用WSGI日志 -->
+    <add key="WSGI_LOG" value="D:\fastApiProject1\logs\wsgi.log" />
+    
+    <!-- FastCGI 设置 -->
+    <add key="WSGI_RESTART_RETRY_ATTEMPTS" value="10" />
+  </appSettings>
+</configuration>
