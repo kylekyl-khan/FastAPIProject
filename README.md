@@ -6,9 +6,9 @@
 
 ## 1. 準備開發環境
 
-1. 安裝 **Python 3.10 以上版本**（可到 [python.org](https://www.python.org/downloads/) 下載）。
-2. 安裝 **Git**（可到 [git-scm.com](https://git-scm.com/downloads) 下載）。
-3. 若想用 Docker 快速啟動 SQL Server，請先安裝 [Docker Desktop](https://www.docker.com/products/docker-desktop/)。
+1. 安裝 **Python 3.10 以上版本**（可到 [python.org]下載）。
+2. 安裝 **Git**（可到 [git-scm.com]下載）。
+3. 若想用 Docker 快速啟動 SQL Server，請先安裝 [Docker Desktop]。
 
 > 如果你的電腦已經有可用的 Microsoft SQL Server，可跳過 Docker 安裝，但後續仍需在該實例建立 `address` 資料庫與 `addresslist` 資料表。
 
@@ -18,7 +18,7 @@
 
 1. 下載專案程式碼並切換到專案資料夾：
    ```bash
-   git clone <[repository-url](https://github.com/kylekyl-khan/FastAPIProject)>
+   git clone <https://github.com/kylekyl-khan/FastAPIProject>
    cd FastAPIProject
    ```
 
