@@ -6,8 +6,8 @@
 
 ## 1. 準備開發環境
 
-1. 安裝 **Python 3.10 以上版本**（可到 [python.org]下載）。
-2. 安裝 **Git**（可到 [git-scm.com]下載）。
+1. 安裝 **Python 3.10 以上版本**。
+2. 安裝 **Git**。
 3. 若想用 Docker 快速啟動 SQL Server，請先安裝 [Docker Desktop]。
 
 > 如果你的電腦已經有可用的 Microsoft SQL Server，可跳過 Docker 安裝，但後續仍需在該實例建立 `address` 資料庫與 `addresslist` 資料表。
