@@ -41,7 +41,7 @@ cd <your-repo>
 
 ```powershell
 python -m venv venv
-.env\Scriptsctivate
+.\venv\Scripts\activate
 ```
 
 確認出現 `(venv)` 字樣即代表啟用成功。
@@ -120,7 +120,7 @@ DB_CONFIG = {
 
 ```powershell
 cd C:\Users\<你的帳號>\Desktop\KC\<your-repo>
-.env\Scriptsctivate
+.\venv\Scripts\activate
 ```
 
 ---
