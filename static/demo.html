@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>組織結構演示</title>
+    <link rel="stylesheet" href="/static/demo.css">
+</head>
+<body>
+    <header class="app-header">
+        <h1>組織樹演示</h1>
+        <p>透過下方的樹狀結構瀏覽組織，並選取需要的單位或人員進行演示。</p>
+    </header>
+    <main class="app-layout">
+        <section class="tree-panel">
+            <div class="panel-header">
+                <h2>組織樹</h2>
+                <div class="search-box">
+                    <input id="search-org" type="search" placeholder="搜尋組織名稱…" aria-label="搜尋組織">
+                </div>
+            </div>
+            <div id="org-tree" class="tree-view" role="tree" aria-label="組織列表"></div>
+        </section>
+        <section class="details-panel" aria-live="polite">
+            <div id="org-details" class="details-card">
+                <h2>選取一個組織以顯示詳細資訊</h2>
+                <p>點擊左側組織名稱可檢視層級、成員與可操作的選項。</p>
+            </div>
+            <div class="people-panel">
+                <h3>人員列表</h3>
+                <div id="people-list" class="people-list" role="list"></div>
+            </div>
+        </section>
+        <aside class="summary-panel">
+            <div class="summary-card">
+                <h2>已選取項目</h2>
+                <div class="summary-section">
+                    <h3>組織</h3>
+                    <ul id="selected-orgs" class="summary-list"></ul>
+                </div>
+                <div class="summary-section">
+                    <h3>人員</h3>
+                    <ul id="selected-people" class="summary-list"></ul>
+                </div>
+                <button id="clear-selection" type="button" class="clear-btn">清除選取</button>
+            </div>
+        </aside>
+    </main>
+    <template id="person-item-template">
+        <div class="person-card" role="listitem">
+            <label class="person-select">
+                <input type="checkbox">
+                <span class="person-name"></span>
+            </label>
+            <div class="person-meta">
+                <span class="person-title"></span>
+                <a class="person-email" href=""></a>
+            </div>
+        </div>
+    </template>
+    <script src="/static/demo.js" type="module"></script>
+</body>
+</html>

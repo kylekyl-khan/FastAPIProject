@@ -1,14 +1,13 @@
 # main.py
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 import urllib.parse
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from typing import List, Optional
+from typing import Dict, List, Optional
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-import json
 
 app = FastAPI()
 
@@ -51,10 +50,29 @@ class Contact(BaseModel):
 class TreeNode(BaseModel):
     name: str
     mail: str
-    children: List['TreeNode'] = []
+    children: List['TreeNode'] = Field(default_factory=list)
 
 
 TreeNode.update_forward_refs()
+
+
+class DemoPerson(BaseModel):
+    id: int
+    name: str
+    title: Optional[str] = None
+    email: str
+    organization_id: int
+
+
+class DemoOrgNode(BaseModel):
+    id: int
+    name: str
+    parent_id: Optional[int] = None
+    children: List['DemoOrgNode'] = Field(default_factory=list)
+    people: List[DemoPerson] = Field(default_factory=list)
+
+
+DemoOrgNode.update_forward_refs()
 
 
 def build_tree(contacts: List[Contact], root_name: str = None) -> List[TreeNode]:
@@ -77,6 +95,199 @@ def build_tree(contacts: List[Contact], root_name: str = None) -> List[TreeNode]
                 node_dict[contact.parent].children.append(node_dict[contact.name])
 
     return roots if not root_name else [node_dict[root_name]] if root_name in node_dict else []
+
+
+DEMO_DB_URL = "sqlite:///./demo_org.db"
+demo_engine = create_engine(
+    DEMO_DB_URL, echo=False, connect_args={"check_same_thread": False}
+)
+DemoSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=demo_engine)
+
+
+def init_demo_db() -> None:
+    with demo_engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS organizations (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    parent_id INTEGER,
+                    FOREIGN KEY(parent_id) REFERENCES organizations(id)
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS people (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    title TEXT,
+                    email TEXT NOT NULL,
+                    organization_id INTEGER NOT NULL,
+                    FOREIGN KEY(organization_id) REFERENCES organizations(id)
+                )
+                """
+            )
+        )
+
+        existing_orgs = conn.execute(
+            text("SELECT COUNT(*) FROM organizations")
+        ).scalar()
+
+        if not existing_orgs:
+            conn.execute(
+                text(
+                    "INSERT INTO organizations (id, name, parent_id) VALUES (:id, :name, :parent_id)"
+                ),
+                [
+                    {"id": 1, "name": "總公司", "parent_id": None},
+                    {"id": 2, "name": "北區事業部", "parent_id": 1},
+                    {"id": 3, "name": "南區事業部", "parent_id": 1},
+                    {"id": 4, "name": "企業方案處", "parent_id": 2},
+                    {"id": 5, "name": "客戶成功處", "parent_id": 2},
+                    {"id": 6, "name": "雲端研發中心", "parent_id": 3},
+                    {"id": 7, "name": "營運支援處", "parent_id": 3},
+                ],
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO people (id, name, title, email, organization_id) VALUES (:id, :name, :title, :email, :organization_id)"
+                ),
+                [
+                    {
+                        "id": 1,
+                        "name": "林雅婷",
+                        "title": "總經理",
+                        "email": "lin.yating@example.com",
+                        "organization_id": 1,
+                    },
+                    {
+                        "id": 2,
+                        "name": "陳建宏",
+                        "title": "北區事業部副總",
+                        "email": "chen.jianhong@example.com",
+                        "organization_id": 2,
+                    },
+                    {
+                        "id": 3,
+                        "name": "黃淑芬",
+                        "title": "企業方案處處長",
+                        "email": "huang.shufen@example.com",
+                        "organization_id": 4,
+                    },
+                    {
+                        "id": 4,
+                        "name": "張少強",
+                        "title": "企業方案顧問",
+                        "email": "zhang.shaoqiang@example.com",
+                        "organization_id": 4,
+                    },
+                    {
+                        "id": 5,
+                        "name": "王怡文",
+                        "title": "客戶成功經理",
+                        "email": "wang.yiwen@example.com",
+                        "organization_id": 5,
+                    },
+                    {
+                        "id": 6,
+                        "name": "周家豪",
+                        "title": "客戶成功專員",
+                        "email": "zhou.jiahao@example.com",
+                        "organization_id": 5,
+                    },
+                    {
+                        "id": 7,
+                        "name": "吳惠敏",
+                        "title": "南區事業部副總",
+                        "email": "wu.huimin@example.com",
+                        "organization_id": 3,
+                    },
+                    {
+                        "id": 8,
+                        "name": "鄭翔宇",
+                        "title": "雲端研發中心經理",
+                        "email": "zheng.xiangyu@example.com",
+                        "organization_id": 6,
+                    },
+                    {
+                        "id": 9,
+                        "name": "蔡欣怡",
+                        "title": "資深工程師",
+                        "email": "cai.xinyi@example.com",
+                        "organization_id": 6,
+                    },
+                    {
+                        "id": 10,
+                        "name": "高子豪",
+                        "title": "營運支援處處長",
+                        "email": "gao.zihao@example.com",
+                        "organization_id": 7,
+                    },
+                    {
+                        "id": 11,
+                        "name": "賴怡潔",
+                        "title": "營運分析師",
+                        "email": "lai.yijie@example.com",
+                        "organization_id": 7,
+                    },
+                ],
+            )
+
+
+def build_demo_tree() -> List[DemoOrgNode]:
+    session = DemoSessionLocal()
+    try:
+        org_rows = session.execute(
+            text("SELECT id, name, parent_id FROM organizations")
+        ).mappings().all()
+        people_rows = session.execute(
+            text(
+                "SELECT id, name, title, email, organization_id FROM people"
+            )
+        ).mappings().all()
+
+        org_nodes: Dict[int, DemoOrgNode] = {}
+        for row in org_rows:
+            org_nodes[row["id"]] = DemoOrgNode(
+                id=row["id"],
+                name=row["name"],
+                parent_id=row["parent_id"],
+                children=[],
+                people=[],
+            )
+
+        for person in people_rows:
+            org_id = person["organization_id"]
+            if org_id in org_nodes:
+                org_nodes[org_id].people.append(
+                    DemoPerson(
+                        id=person["id"],
+                        name=person["name"],
+                        title=person["title"],
+                        email=person["email"],
+                        organization_id=org_id,
+                    )
+                )
+
+        roots: List[DemoOrgNode] = []
+        for node in org_nodes.values():
+            if node.parent_id and node.parent_id in org_nodes:
+                org_nodes[node.parent_id].children.append(node)
+            else:
+                roots.append(node)
+
+        return roots
+    finally:
+        session.close()
+
+
+@app.on_event("startup")
+async def on_startup() -> None:
+    init_demo_db()
 
 
 @app.get("/")
@@ -133,6 +344,35 @@ async def get_contacts_subtree(root_name: str):
 @app.get("/contacts")
 async def contacts_page():
     return FileResponse('./static/contacts.html')
+
+
+@app.get("/demo")
+async def demo_page():
+    return FileResponse('./static/demo.html')
+
+
+@app.get("/demo/organizations/tree", response_model=List[DemoOrgNode])
+async def demo_organization_tree():
+    return build_demo_tree()
+
+
+@app.get("/demo/organizations/{org_id}", response_model=DemoOrgNode)
+async def demo_organization(org_id: int):
+    tree = build_demo_tree()
+    node_map: Dict[int, DemoOrgNode] = {}
+
+    def traverse(node: DemoOrgNode) -> None:
+        node_map[node.id] = node
+        for child in node.children:
+            traverse(child)
+
+    for root_node in tree:
+        traverse(root_node)
+
+    if org_id not in node_map:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    return node_map[org_id]
 
 
 @app.get("/optimized-manifest.xml")
