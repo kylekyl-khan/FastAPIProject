@@ -182,7 +182,7 @@ INFO:     Uvicorn running on http://127.0.0.1:9000 (Press CTRL+C to quit)
 
 | 操作 | 指令 |
 |------|------|
-| 啟動虛擬環境 | `.env\Scriptsctivate` |
+| 啟動虛擬環境 | `.\venv\Scripts\activate` |
 | 安裝套件 | `python -m pip install -r requirements.txt` |
 | 啟動 API | `python -m uvicorn main:app --host 127.0.0.1 --port 9000` |
 | 停止 API | `Ctrl + C` |
