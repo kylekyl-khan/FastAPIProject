@@ -1,0 +1,53 @@
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  padding: 12px;
+}
+
+header {
+  margin-bottom: 8px;
+}
+
+.layout {
+  display: flex;
+  gap: 12px;
+}
+
+.tree {
+  flex: 1;
+  max-width: 40%;
+  border: 1px solid #ddd;
+  padding: 8px;
+  overflow: auto;
+}
+
+.details {
+  flex: 1;
+  border: 1px solid #ddd;
+  padding: 8px;
+  min-height: 200px;
+}
+
+.tree ul {
+  list-style: none;
+  padding-left: 16px;
+}
+
+.tree li span {
+  cursor: pointer;
+  display: inline-block;
+  padding: 2px 4px;
+}
+
+.tree li span:hover {
+  background-color: #f0f0f0;
+}
+
+.tree li span.selected {
+  background-color: #0078d4;
+  color: white;
+}

@@ -1,14 +1,23 @@
 # main.py
-from fastapi import FastAPI
-from pydantic import BaseModel
+import logging
 import urllib.parse
+import json
+from typing import List, Optional
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from typing import List, Optional
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-import json
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+)
+logger = logging.getLogger("contacts")
+
 
 app = FastAPI()
 
@@ -51,7 +60,7 @@ class Contact(BaseModel):
 class TreeNode(BaseModel):
     name: str
     mail: str
-    children: List['TreeNode'] = []
+    children: List['TreeNode'] = Field(default_factory=list)
 
 
 TreeNode.update_forward_refs()
@@ -89,11 +98,23 @@ async def say_hello(name: str):
     return {"message": f"Hello {name}"}
 
 
+@app.get("/health")
+async def health():
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=500, detail="DB connection failed")
+    finally:
+        db.close()
+
+
 @app.get("/contacts/tree")
 async def get_contacts_tree():
+    db = SessionLocal()
     try:
-        db = SessionLocal()
-
         # 查询所有联系人
         result = db.execute(text("SELECT name, parent, mail FROM addresslist"))
         rows = result.fetchall()
@@ -103,18 +124,19 @@ async def get_contacts_tree():
         # 构建树状结构
         tree = build_tree(contacts)
 
-        db.close()
         # 直接返回，让FastAPI处理序列化
         return tree
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"get_contacts_tree failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load contacts tree")
+    finally:
+        db.close()
 
 
 @app.get("/contacts/tree/{root_name}")
 async def get_contacts_subtree(root_name: str):
+    db = SessionLocal()
     try:
-        db = SessionLocal()
-
         # 查询所有联系人
         result = db.execute(text("SELECT name, parent, mail FROM addresslist"))
         rows = result.fetchall()
@@ -124,10 +146,40 @@ async def get_contacts_subtree(root_name: str):
         # 构建子树
         subtree = build_tree(contacts, root_name)
 
-        db.close()
         return subtree[0] if subtree else {}
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"get_contacts_subtree failed for {root_name}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load contacts subtree")
+    finally:
+        db.close()
+
+
+@app.get("/contacts/employee")
+async def get_employee(mail: str = Query(..., description="員工 Email")):
+    db = SessionLocal()
+    try:
+        result = db.execute(
+            text("SELECT name, parent, mail FROM addresslist WHERE mail = :mail"),
+            {"mail": mail},
+        )
+        row = result.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Employee not found")
+
+        logger.info(f"get_employee: {mail} -> {row[0]}")
+        return {
+            "name": row[0],
+            "parent": row[1],
+            "mail": row[2],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_employee failed for {mail}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        db.close()
 
 
 @app.get("/contacts")
