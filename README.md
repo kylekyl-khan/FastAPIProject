@@ -145,7 +145,60 @@ Outlook 外掛要求 HTTPS。專案提供腳本快速建立自簽憑證。
    python https_server.py
    ```
 4. 在 Outlook 外掛設定中使用 `https://127.0.0.1:8443/optimized-manifest.xml` 作為 Manifest URL。
+## 8.1 啟用 Microsoft Entra（Azure AD）登入流程（實驗性）
 
+專案已內建簡單的 Microsoft Entra ID（Azure AD）登入流程，方便在 Outlook Add-in 中進行組織內單一登入示範。
+
+### 建立 Entra App registration
+
+1. 進入 [Azure Portal](https://portal.azure.com) → **Microsoft Entra ID** → **App registrations** → **New registration**。
+2. 輸入名稱（例如 `FastAPI Outlook Contacts`）。
+3. 支援的帳戶類型建議：
+   - 僅供本租戶使用：選擇 **Single tenant**。
+4. Redirect URI：
+   - 類型：`Web`
+   - URL：`https://127.0.0.1:8443/auth/callback`
+5. 註冊完成後記下：
+   - Application (client) ID
+   - Directory (tenant) ID
+6. 在 **Certificates & secrets** 頁籤建立一組 Client Secret，妥善保存其值。
+
+### 設定 .env
+
+在專案根目錄建立 `.env`（可參考 `.env.example`）：
+
+```env
+SECRET_KEY=some-random-string-for-session
+
+AZURE_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+AZURE_TENANT_ID=yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy
+AZURE_CLIENT_SECRET=your-secret
+AZURE_REDIRECT_URI=https://127.0.0.1:8443/auth/callback
+AZURE_AUTHORITY=https://login.microsoftonline.com/yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy
+```
+
+> 請勿將 `.env` commit 到 Git。
+
+### Demo 登入流程
+
+1. 啟動 HTTPS（若需）：依原本「啟用 HTTPS 以配合 Outlook 外掛」步驟，或用 uvicorn 在本機啟動：
+   ```bash
+   uvicorn main:app --host 127.0.0.1 --port 9000 --reload
+   ```
+2. 在瀏覽器或 Outlook 外掛中開啟：
+   - `https://127.0.0.1:8443/contacts.html`
+3. 前端可呼叫：
+   - `GET /auth/me` 檢查登入狀態：
+     - 已登入：`{"authenticated": true, "user": {...}}`
+     - 未登入：`{"authenticated": false}`
+4. 若未登入：
+   - 導向 `/auth/login`，會自動 redirect 到 Microsoft 登入頁。
+5. 登入成功後，Microsoft 會 redirect 回 `/auth/callback`，伺服器會：
+   - 驗證 `state`
+   - 用 `code` 換 `access_token`
+   - 把 token 與使用者資訊放到 session
+   - 最後 redirect 回 `/contacts.html`
+6. 之後可呼叫受保護 API（例如 `GET /contacts/tree/protected-example`）驗證登入狀態。
 ---
 
 ## 9. 常見問題排查
