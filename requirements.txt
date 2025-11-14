@@ -5,3 +5,5 @@ pymssql
 pydantic
 trustme
 pillow
+httpx
+python-dotenv
