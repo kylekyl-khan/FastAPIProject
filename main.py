@@ -1,16 +1,19 @@
 # main.py
 import logging
 import urllib.parse
-import json
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+from starlette.middleware.sessions import SessionMiddleware
+
+from auth_routes import router as auth_router
+from config import get_settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,10 +21,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("contacts")
 
-
 app = FastAPI()
 
-# 添加CORS中间件
+# CORS 中間件（保留原本設定）
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,23 +32,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 数据库连接配置
+# SessionMiddleware：用於存放登入相關資訊
+settings = get_settings()
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
+# 資料庫連線配置
 DB_CONFIG = {
-    'server': 'localhost',
-    'database': 'address',
-    'username': 'sa',
-    'password': 'itpower1!'
+    "server": "localhost",
+    "database": "address",
+    "username": "sa",
+    "password": "itpower1!",
 }
 
 
-# 创建数据库连接URL
+# 建立資料庫 URL
 def get_database_url():
-    password_encoded = urllib.parse.quote_plus(DB_CONFIG['password'])
-    # 对于默认实例，不需要指定实例名
-    return f"mssql+pymssql://{DB_CONFIG['username']}:{password_encoded}@{DB_CONFIG['server']}/{DB_CONFIG['database']}"
+    password_encoded = urllib.parse.quote_plus(DB_CONFIG["password"])
+    return (
+        f"mssql+pymssql://{DB_CONFIG['username']}:{password_encoded}"
+        f"@{DB_CONFIG['server']}/{DB_CONFIG['database']}"
+    )
 
 
-# 创建引擎和会话
+# 建立引擎與 Session
 engine = create_engine(get_database_url(), echo=False, connect_args={"charset": "utf8"})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -60,23 +68,23 @@ class Contact(BaseModel):
 class TreeNode(BaseModel):
     name: str
     mail: str
-    children: List['TreeNode'] = Field(default_factory=list)
+    children: List["TreeNode"] = Field(default_factory=list)
 
 
 TreeNode.update_forward_refs()
 
 
 def build_tree(contacts: List[Contact], root_name: str = None) -> List[TreeNode]:
-    # 创建节点字典
+    # 建立節點字典
     node_dict = {}
     for contact in contacts:
         node_dict[contact.name] = TreeNode(
             name=contact.name,
             mail=contact.mail,
-            children=[]
+            children=[],
         )
 
-    # 构建树结构
+    # 建立樹狀結構
     roots = []
     for contact in contacts:
         if contact.parent is None or contact.parent == "":
@@ -88,6 +96,24 @@ def build_tree(contacts: List[Contact], root_name: str = None) -> List[TreeNode]
     return roots if not root_name else [node_dict[root_name]] if root_name in node_dict else []
 
 
+# -----------------------
+# 登入檢查 dependency
+# -----------------------
+def get_current_user(request: Request):
+    """
+    從 session 中取得目前登入使用者資訊。
+    - 若未登入：拋出 401（也可以改成 redirect 到 /auth/login）
+    """
+    auth_data = request.session.get("auth")
+    if not auth_data or not auth_data.get("access_token"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    return auth_data.get("user")
+
+
+# 根路由
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
@@ -115,16 +141,10 @@ async def health():
 async def get_contacts_tree():
     db = SessionLocal()
     try:
-        # 查询所有联系人
         result = db.execute(text("SELECT name, parent, mail FROM addresslist"))
         rows = result.fetchall()
-
         contacts = [Contact(name=row[0], parent=row[1], mail=row[2]) for row in rows]
-
-        # 构建树状结构
         tree = build_tree(contacts)
-
-        # 直接返回，让FastAPI处理序列化
         return tree
     except Exception as e:
         logger.error(f"get_contacts_tree failed: {e}")
@@ -137,15 +157,10 @@ async def get_contacts_tree():
 async def get_contacts_subtree(root_name: str):
     db = SessionLocal()
     try:
-        # 查询所有联系人
         result = db.execute(text("SELECT name, parent, mail FROM addresslist"))
         rows = result.fetchall()
-
         contacts = [Contact(name=row[0], parent=row[1], mail=row[2]) for row in rows]
-
-        # 构建子树
         subtree = build_tree(contacts, root_name)
-
         return subtree[0] if subtree else {}
     except Exception as e:
         logger.error(f"get_contacts_subtree failed for {root_name}: {e}")
@@ -182,16 +197,43 @@ async def get_employee(mail: str = Query(..., description="員工 Email")):
         db.close()
 
 
+# 示範：受保護的樹狀查詢 API（需要登入）
+@app.get("/contacts/tree/protected-example")
+async def get_protected_contacts_tree(current_user=Depends(get_current_user)):
+    """
+    示範用受保護 API：
+    - 呼叫前需先完成 /auth/login 流程。
+    - current_user 為 session 內的 user info。
+    """
+    db = SessionLocal()
+    try:
+        result = db.execute(text("SELECT name, parent, mail FROM addresslist"))
+        rows = result.fetchall()
+        contacts = [Contact(name=row[0], parent=row[1], mail=row[2]) for row in rows]
+        tree = build_tree(contacts)
+        return {
+            "current_user": current_user,
+            "tree": tree,
+        }
+    except Exception as e:
+        logger.error(f"get_protected_contacts_tree failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load contacts tree")
+    finally:
+        db.close()
+
+
 @app.get("/contacts")
 async def contacts_page():
-    return FileResponse('./static/contacts.html')
+    return FileResponse("./static/contacts.html")
 
 
 @app.get("/optimized-manifest.xml")
 async def optimized_manifest():
-    return FileResponse('./static/optimized-manifest.xml')
+    return FileResponse("./static/optimized-manifest.xml")
 
 
-
-# 挂载静态文件目录（放在所有路由定义之后）
+# 掛載靜態檔案
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# 掛載 auth router
+app.include_router(auth_router)
