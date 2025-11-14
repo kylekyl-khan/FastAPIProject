@@ -38,10 +38,10 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 # 資料庫連線配置
 DB_CONFIG = {
-    "server": "localhost",
+    "server": "qs db01-test",  # 或實際實例名稱，例如 'qs db01-test\\SQLEXPRESS'
     "database": "address",
-    "username": "sa",
-    "password": "itpower1!",
+    "username": "KCISweb_user",
+    "password": "0xeYzpQJF9",
 }
 
 
