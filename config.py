@@ -5,6 +5,7 @@
 
 import urllib.parse
 from functools import lru_cache
+import urllib.parse
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -66,6 +67,22 @@ class Settings(BaseSettings):
         if self.AZURE_TENANT_ID:
             return f"https://login.microsoftonline.com/{self.AZURE_TENANT_ID}"
         return ""
+
+    # Database
+    DB_SERVER: str = os.getenv("DB_SERVER", "QS-DBO1-TEST")
+    DB_NAME: str = os.getenv("DB_NAME", "DB_Mis_Admin")
+    DB_USERNAME: str = os.getenv("DB_USERNAME", "")
+    DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
+
+    @property
+    def database_url(self) -> str:
+        """組出資料庫連線字串，使用環境變數提供的帳號密碼與伺服器資訊。"""
+
+        password_encoded = urllib.parse.quote_plus(self.DB_PASSWORD)
+        return (
+            f"mssql+pymssql://{self.DB_USERNAME}:{password_encoded}"
+            f"@{self.DB_SERVER}/{self.DB_NAME}"
+        )
 
 
 @lru_cache()
