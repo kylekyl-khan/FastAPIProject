@@ -15,13 +15,13 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from auth_routes import router as auth_router
 from config import get_settings
-from contacts_service import (
-    build_tree_from_employees,
-    fetch_active_employees,
-    fetch_employee_by_email,
-    find_node_by_key,
-)
 from database import get_db_session
+from graph_service import (
+    fetch_graph_users,
+    get_access_token_from_session,
+    map_graph_user_to_employee,
+)
+from models import build_tree_from_employees, find_node_by_key
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
 LOGGER = logging.getLogger("contacts")
@@ -52,10 +52,18 @@ def get_current_user(request: Request):
     從 Session 取得目前登入使用者資訊，若未登入則拋出 401。
     """
 
-    auth_data = request.session.get("auth")
-    if not auth_data or not auth_data.get("access_token"):
+    auth_data = request.session.get("auth") or {}
+    token_data = auth_data.get("token") if isinstance(auth_data.get("token"), dict) else auth_data
+    if not token_data.get("access_token"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     return auth_data.get("user")
+
+
+async def _load_full_tree_from_graph(request: Request):
+    access_token = get_access_token_from_session(request)
+    users = await fetch_graph_users(access_token)
+    employees = [map_graph_user_to_employee(item) for item in users]
+    return build_tree_from_employees(employees)
 
 
 # ---------------------------------------------------------------------------
@@ -101,46 +109,59 @@ async def health(db: Session = Depends(get_db_session)):
 
 
 @app.get("/contacts/tree")
-async def get_contacts_tree(db: Session = Depends(get_db_session)):
+async def get_contacts_tree(request: Request):
     """
-    讀取所有在職員工並組成公司層級樹狀結構。
+    從 Microsoft Graph 讀取所有啟用使用者並組成公司層級樹狀結構。
     """
 
     try:
-        employees = fetch_active_employees(db)
-        tree = build_tree_from_employees(employees)
+        tree = await _load_full_tree_from_graph(request)
         return tree
+    except HTTPException:
+        raise
     except Exception as exc:  # pragma: no cover - 以日誌協助偵錯
         LOGGER.error("get_contacts_tree failed: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to load contacts tree") from exc
 
 
 @app.get("/contacts/tree/{root_name}")
-async def get_contacts_subtree(root_name: str, db: Session = Depends(get_db_session)):
+async def get_contacts_subtree(root_name: str, request: Request):
     """
     取得指定節點的子樹，若找不到則回傳空物件。
     """
 
     try:
-        employees = fetch_active_employees(db)
-        tree = build_tree_from_employees(employees)
+        tree = await _load_full_tree_from_graph(request)
         subtree = find_node_by_key(tree, root_name)
         return subtree or {}
+    except HTTPException:
+        raise
     except Exception as exc:  # pragma: no cover
         LOGGER.error("get_contacts_subtree failed for %s: %s", root_name, exc)
         raise HTTPException(status_code=500, detail="Failed to load contacts subtree") from exc
 
 
 @app.get("/contacts/employee")
-async def get_employee(mail: str = Query(..., description="Employee email"), db: Session = Depends(get_db_session)):
+async def get_employee(request: Request, mail: str = Query(..., description="Employee email")):
     """
     依電子郵件查詢單一員工的公開聯絡資訊。
     """
 
     try:
-        employee = fetch_employee_by_email(db, mail)
-        if not employee:
+        access_token = get_access_token_from_session(request)
+        users = await fetch_graph_users(access_token)
+        matched = None
+        for user in users:
+            mail_value = (user.get("mail") or "").lower()
+            upn_value = (user.get("userPrincipalName") or "").lower()
+            if mail.lower() == mail_value or mail.lower() == upn_value:
+                matched = user
+                break
+
+        if not matched:
             raise HTTPException(status_code=404, detail="Employee not found")
+
+        employee = map_graph_user_to_employee(matched)
         LOGGER.info("get_employee: %s -> %s", mail, employee.name)
         return employee
     except HTTPException:
@@ -151,15 +172,16 @@ async def get_employee(mail: str = Query(..., description="Employee email"), db:
 
 
 @app.get("/contacts/tree/protected-example")
-async def get_protected_contacts_tree(current_user=Depends(get_current_user), db: Session = Depends(get_db_session)):
+async def get_protected_contacts_tree(request: Request, current_user=Depends(get_current_user)):
     """
     示範受保護的樹狀查詢，需要先完成登入流程才能存取。
     """
 
     try:
-        employees = fetch_active_employees(db)
-        tree = build_tree_from_employees(employees)
+        tree = await _load_full_tree_from_graph(request)
         return {"current_user": current_user, "tree": tree}
+    except HTTPException:
+        raise
     except Exception as exc:  # pragma: no cover
         LOGGER.error("get_protected_contacts_tree failed: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to load contacts tree") from exc

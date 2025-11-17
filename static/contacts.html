@@ -252,7 +252,9 @@
           (data.name && data.name.toLowerCase().includes(lower)) ||
           (data.ename && data.ename.toLowerCase().includes(lower)) ||
           (data.dept_name && data.dept_name.toLowerCase().includes(lower)) ||
-          (data.email && data.email.toLowerCase().includes(lower))
+          (data.email && data.email.toLowerCase().includes(lower)) ||
+          (data.campus && data.campus.toLowerCase().includes(lower)) ||
+          (data.title && data.title.toLowerCase().includes(lower))
         );
       });
 
@@ -265,7 +267,6 @@
           const info = [];
           if (node.data?.dept_name) info.push(node.data.dept_name);
           if (node.data?.title) info.push(node.data.title);
-          if (node.data?.ext) info.push(`Ext ${node.data.ext}`);
           if (node.data?.campus) info.push(node.data.campus);
           return `
             <div class="search-result-row" data-key="${node.key}">
@@ -313,20 +314,20 @@
           return;
         }
 
-        if (node.node_type === 'employee') {
-          const row = document.createElement('div');
-          row.className = 'employee-row';
-          row.dataset.key = node.key;
+      if (node.node_type === 'employee') {
+        const row = document.createElement('div');
+        row.className = 'employee-row';
+        row.dataset.key = node.key;
 
-          const metaParts = [];
-          if (node.data?.dept_name) metaParts.push(node.data.dept_name);
-          if (node.data?.title) metaParts.push(node.data.title);
-          if (node.data?.ext) metaParts.push(`Ext ${node.data.ext}`);
+        const metaParts = [];
+        if (node.data?.dept_name) metaParts.push(node.data.dept_name);
+        if (node.data?.title) metaParts.push(node.data.title);
+        if (node.data?.campus) metaParts.push(node.data.campus);
 
-          row.innerHTML = `
-            <div class="name">${node.data?.name ?? node.label}</div>
-            <div class="meta">${metaParts.join(' ｜ ')}</div>
-          `;
+        row.innerHTML = `
+          <div class="name">${node.data?.name ?? node.label}</div>
+          <div class="meta">${metaParts.join(' ｜ ')}</div>
+        `;
 
           row.addEventListener('click', () => {
             highlightEmployee(node.key);
@@ -362,25 +363,39 @@
       if (!node || node.node_type !== 'employee') return;
       const data = node.data || {};
       const detailPanel = document.getElementById('detail-panel');
-      const phoneLine = data.phone_no ? `${data.phone_no}${data.ext ? ` #${data.ext}` : ''}` : '';
-      const mobileLine = data.mobile_phone || '';
+      const phoneLine = data.phone_no ? `${data.phone_no}${data.ext ? ` #${data.ext}` : ''}` : '-';
+      const mobileLine = data.mobile_phone || '-';
+      const campusLine = data.campus || '-';
+      const deptLine = data.dept_name || '-';
+      const titleLine = data.title || data.job || '-';
 
       detailPanel.innerHTML = `
         <h2>${data.name || node.label}</h2>
-        ${data.ename ? `<div class="muted">${data.ename}</div>` : ''}
-        <div class="muted">${[data.dept_name, data.title, data.campus].filter(Boolean).join(' ｜ ')}</div>
+        <div class="muted">${[deptLine !== '-' ? deptLine : null, titleLine !== '-' ? titleLine : null, campusLine !== '-' ? campusLine : null].filter(Boolean).join(' ｜ ') || '-'}</div>
+        <div class="contact-item">
+          <strong>Department:</strong>
+          <span>${deptLine}</span>
+        </div>
+        <div class="contact-item">
+          <strong>Title:</strong>
+          <span>${titleLine}</span>
+        </div>
+        <div class="contact-item">
+          <strong>Campus:</strong>
+          <span>${campusLine}</span>
+        </div>
         <div class="contact-item">
           <strong>Email:</strong>
           ${data.email ? `<a href="mailto:${data.email}">${data.email}</a>` : '<span class="muted">Not available</span>'}
           ${data.email ? `<button class="btn-link secondary" data-email="${data.email}" id="copy-email">Copy</button>` : ''}
         </div>
         <div class="contact-item">
-          <strong>Company:</strong>
-          ${phoneLine || '<span class="muted">Not available</span>'}
+          <strong>Company Phone:</strong>
+          ${phoneLine !== '-' ? phoneLine : '<span class="muted">Not available</span>'}
         </div>
         <div class="contact-item">
           <strong>Mobile:</strong>
-          ${mobileLine || '<span class="muted">Not available</span>'}
+          ${mobileLine !== '-' ? mobileLine : '<span class="muted">Not available</span>'}
         </div>
       `;
 

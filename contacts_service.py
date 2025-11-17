@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config import get_settings
-from schemas import EmployeePublic, TreeNode
+from models import EmployeePublic, TreeNode
 
 SETTINGS = get_settings()
 
