@@ -1,26 +1,34 @@
 """
-此檔案負責建立資料庫連線引擎並提供 SQLAlchemy Session 工具函式。
+建立可選的資料庫連線工具，主要作為健康檢查或未來備援使用。
 """
 
-from collections.abc import Generator
+from contextlib import contextmanager
+from typing import Generator
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
-from config import get_database_url
+from config import get_database_url, get_settings
 
-# 建立 SQLAlchemy 引擎與 SessionFactory
-engine = create_engine(get_database_url(), echo=False, connect_args={"charset": "utf8"})
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+settings = get_settings()
+database_url = get_database_url(settings)
+
+engine = create_engine(database_url) if database_url else None
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None
 
 
-def get_db_session() -> Generator[Session, None, None]:
+@contextmanager
+def get_db_session() -> Generator:
     """
-    產生一個資料庫 Session，並在完成後自動釋放連線。
+    提供一個 context manager 取得 DB Session。
+    若未配置 DB（database_url 為 None），會拋出 RuntimeError。
     """
 
-    session = SessionLocal()
+    if SessionLocal is None:
+        raise RuntimeError("Database is not configured")
+
+    db = SessionLocal()
     try:
-        yield session
+        yield db
     finally:
-        session.close()
+        db.close()
