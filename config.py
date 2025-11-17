@@ -43,7 +43,7 @@ class Settings:
     ]
 
     # Database
-    DB_SERVER: str = os.getenv("DB_SERVER", "db01_test")
+    DB_SERVER: str = os.getenv("DB_SERVER", "QS-DBO1-TEST")
     DB_NAME: str = os.getenv("DB_NAME", "DB_Mis_Admin")
     DB_USERNAME: str = os.getenv("DB_USERNAME", "")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
