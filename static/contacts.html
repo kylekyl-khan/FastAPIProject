@@ -1,34 +1,487 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>公司通訊錄 Demo</title>
-  <link rel="stylesheet" href="/static/style.css" />
-  <!-- 在 Outlook 中才會載入 office.js，純瀏覽器開也不會壞掉 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Company Directory</title>
+  <!-- 在 Outlook 中才會載入 office.js，純瀏覽器開啟不會受影響 -->
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" async></script>
+  <style>
+    :root {
+      --bg: #f7f7f9;
+      --card-bg: #fff;
+      --border: #e0e0e0;
+      --text: #1f1f1f;
+      --muted: #6b7280;
+      --accent: #0f6cbd;
+      --accent-soft: #eef5ff;
+      --error: #b42318;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", "Noto Sans TC", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    #app {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 16px 14px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      margin: 0;
+    }
+
+    .status-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-link {
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      text-decoration: none;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    .btn-link.secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    #search-area {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #search-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+
+    #tree-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      max-height: 440px;
+      overflow-y: auto;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    details.tree-node {
+      margin-left: 12px;
+      padding: 4px 0;
+    }
+
+    details.tree-node > summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .employee-row {
+      padding: 8px 10px;
+      border-radius: 8px;
+      margin: 4px 0 4px 12px;
+      background: transparent;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .employee-row:hover,
+    .employee-row.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+
+    .employee-row .name {
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--text);
+    }
+
+    .employee-row .meta {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    #search-results {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .search-result-row {
+      padding: 8px 6px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .search-result-row:hover {
+      background: var(--accent-soft);
+    }
+
+    #detail-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    #detail-panel h2 {
+      margin: 0 0 4px 0;
+      font-size: 1.25rem;
+    }
+
+    #detail-panel .muted {
+      color: var(--muted);
+      margin: 2px 0;
+    }
+
+    #detail-panel .contact-item {
+      margin: 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      word-break: break-all;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 0.85rem;
+    }
+
+    .helper-text {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .error-text {
+      color: var(--error);
+      font-size: 0.95rem;
+    }
+  </style>
 </head>
 <body>
   <div id="app">
     <header>
-      <h1>公司通訊錄 Demo Preview</h1>
-      <p>這是從中繼資料庫透過 FastAPI 取得的組織樹與人員資訊。</p>
-      <!-- 搜尋欄位可以先留著，功能之後再補 -->
-      <input id="search-input" placeholder="搜尋姓名 / 部門 / 職稱（demo 未實作）" />
+      <h1>Company Directory</h1>
+      <div class="status-line" id="auth-status">Loading...</div>
     </header>
 
-    <main class="layout">
-      <section id="contacts-tree" class="tree">
-        <!-- JS 會動態把樹插在這裡 -->
-        <ul></ul>
-      </section>
+    <div id="loading">Loading data...</div>
+    <div id="error" class="error-text" style="display:none"></div>
 
-      <section id="details-box" class="details">
-        <h2>人員詳細資訊</h2>
-        <p>請從左側樹狀清單選擇一個人員。</p>
-      </section>
-    </main>
+    <div id="content" style="display:none">
+      <div id="search-area">
+        <input type="text" id="search-input" placeholder="Search by name, department, or email" />
+        <div id="search-results" style="display:none"></div>
+      </div>
+
+      <div id="tree-container"></div>
+
+      <div id="detail-panel">
+        <div class="helper-text" id="detail-placeholder">Select a colleague to view details.</div>
+      </div>
+    </div>
   </div>
 
-  <script src="/static/script.js"></script>
+  <script>
+    // 將所有需要的節點儲存在記憶體，方便搜尋與細節顯示
+    const state = {
+      employeesFlat: [],
+      employeeMap: new Map(),
+      activeEmployeeKey: null,
+      treeRoot: [],
+    };
+
+    // 建立搜尋結果區塊
+    function renderSearchResults(keyword) {
+      const resultsEl = document.getElementById('search-results');
+      if (!keyword) {
+        resultsEl.style.display = 'none';
+        resultsEl.innerHTML = '';
+        document.getElementById('tree-container').style.display = 'block';
+        return;
+      }
+
+      const lower = keyword.toLowerCase();
+      const filtered = state.employeesFlat.filter(({ data }) => {
+        if (!data) return false;
+        return (
+          (data.name && data.name.toLowerCase().includes(lower)) ||
+          (data.ename && data.ename.toLowerCase().includes(lower)) ||
+          (data.dept_name && data.dept_name.toLowerCase().includes(lower)) ||
+          (data.email && data.email.toLowerCase().includes(lower))
+        );
+      });
+
+      resultsEl.style.display = 'block';
+      document.getElementById('tree-container').style.display = 'none';
+
+      const header = `<div class="helper-text">Search results (${filtered.length})</div>`;
+      const rows = filtered
+        .map((node) => {
+          const info = [];
+          if (node.data?.dept_name) info.push(node.data.dept_name);
+          if (node.data?.title) info.push(node.data.title);
+          if (node.data?.ext) info.push(`Ext ${node.data.ext}`);
+          if (node.data?.campus) info.push(node.data.campus);
+          return `
+            <div class="search-result-row" data-key="${node.key}">
+              <div class="name">${node.data?.name ?? node.label}</div>
+              <div class="meta">${info.join(' ｜ ')}</div>
+            </div>
+          `;
+        })
+        .join('');
+
+      resultsEl.innerHTML = header + (rows || '<div class="helper-text">No matches found.</div>');
+
+      resultsEl.querySelectorAll('.search-result-row').forEach((row) => {
+        row.addEventListener('click', () => {
+          const key = row.dataset.key;
+          const node = state.employeeMap.get(key);
+          if (node) {
+            highlightEmployee(key);
+            showEmployeeDetails(node);
+            scrollEmployeeIntoView(key);
+          }
+        });
+      });
+    }
+
+    // 渲染樹狀資料
+    function renderTree(nodes, container) {
+      nodes.forEach((node) => {
+        if (node.node_type === 'company') {
+          renderTree(node.children || [], container);
+          return;
+        }
+
+        if (node.node_type === 'campus' || node.node_type === 'dept') {
+          const details = document.createElement('details');
+          details.className = `tree-node ${node.node_type}`;
+          details.open = true;
+
+          const summary = document.createElement('summary');
+          summary.textContent = node.label;
+          details.appendChild(summary);
+
+          renderTree(node.children || [], details);
+          container.appendChild(details);
+          return;
+        }
+
+        if (node.node_type === 'employee') {
+          const row = document.createElement('div');
+          row.className = 'employee-row';
+          row.dataset.key = node.key;
+
+          const metaParts = [];
+          if (node.data?.dept_name) metaParts.push(node.data.dept_name);
+          if (node.data?.title) metaParts.push(node.data.title);
+          if (node.data?.ext) metaParts.push(`Ext ${node.data.ext}`);
+
+          row.innerHTML = `
+            <div class="name">${node.data?.name ?? node.label}</div>
+            <div class="meta">${metaParts.join(' ｜ ')}</div>
+          `;
+
+          row.addEventListener('click', () => {
+            highlightEmployee(node.key);
+            showEmployeeDetails(node);
+          });
+
+          container.appendChild(row);
+          state.employeesFlat.push(node);
+          state.employeeMap.set(node.key, node);
+        }
+      });
+    }
+
+    // 高亮目前選取的員工
+    function highlightEmployee(key) {
+      if (state.activeEmployeeKey) {
+        document.querySelectorAll(`[data-key="${state.activeEmployeeKey}"]`).forEach((el) => el.classList.remove('active'));
+      }
+      document.querySelectorAll(`[data-key="${key}"]`).forEach((el) => el.classList.add('active'));
+      state.activeEmployeeKey = key;
+    }
+
+    // 捲動到樹中的指定員工
+    function scrollEmployeeIntoView(key) {
+      const el = document.querySelector(`.employee-row[data-key="${key}"]`);
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    // 顯示員工詳細資訊
+    function showEmployeeDetails(node) {
+      if (!node || node.node_type !== 'employee') return;
+      const data = node.data || {};
+      const detailPanel = document.getElementById('detail-panel');
+      const phoneLine = data.phone_no ? `${data.phone_no}${data.ext ? ` #${data.ext}` : ''}` : '';
+      const mobileLine = data.mobile_phone || '';
+
+      detailPanel.innerHTML = `
+        <h2>${data.name || node.label}</h2>
+        ${data.ename ? `<div class="muted">${data.ename}</div>` : ''}
+        <div class="muted">${[data.dept_name, data.title, data.campus].filter(Boolean).join(' ｜ ')}</div>
+        <div class="contact-item">
+          <strong>Email:</strong>
+          ${data.email ? `<a href="mailto:${data.email}">${data.email}</a>` : '<span class="muted">Not available</span>'}
+          ${data.email ? `<button class="btn-link secondary" data-email="${data.email}" id="copy-email">Copy</button>` : ''}
+        </div>
+        <div class="contact-item">
+          <strong>Company:</strong>
+          ${phoneLine || '<span class="muted">Not available</span>'}
+        </div>
+        <div class="contact-item">
+          <strong>Mobile:</strong>
+          ${mobileLine || '<span class="muted">Not available</span>'}
+        </div>
+      `;
+
+      const copyBtn = document.getElementById('copy-email');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => copyEmail(data.email));
+      }
+    }
+
+    // 複製電子郵件地址
+    function copyEmail(email) {
+      if (!email) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(email).catch(() => fallbackCopy(email));
+      } else {
+        fallbackCopy(email);
+      }
+    }
+
+    // 簡易複製備援方案
+    function fallbackCopy(email) {
+      window.prompt('Copy email address:', email);
+    }
+
+    // 設定搜尋事件
+    function setupSearch() {
+      const input = document.getElementById('search-input');
+      input.addEventListener('input', (event) => {
+        const keyword = event.target.value.trim();
+        renderSearchResults(keyword);
+      });
+    }
+
+    // 渲染樹狀資料與初始化搜尋
+    function initializeTree(data) {
+      const container = document.getElementById('tree-container');
+      container.innerHTML = '';
+      state.employeesFlat = [];
+      state.employeeMap.clear();
+      renderTree(data, container);
+      setupSearch();
+    }
+
+    // 顯示登入狀態
+    function renderAuthStatus(authenticated, user) {
+      const statusEl = document.getElementById('auth-status');
+      statusEl.innerHTML = '';
+      if (!authenticated) {
+        statusEl.innerHTML = `
+          <span>Not signed in.</span>
+          <a class="btn-link" href="/auth/login">Sign in</a>
+        `;
+      } else {
+        const name = user?.displayName || user?.display_name || 'User';
+        const email = user?.mail || user?.email || user?.userPrincipalName || '';
+        statusEl.innerHTML = `Signed in as ${name}${email ? ` (${email})` : ''}`;
+      }
+    }
+
+    // 顯示載入與錯誤狀態
+    function setLoading(visible) {
+      document.getElementById('loading').style.display = visible ? 'block' : 'none';
+      document.getElementById('content').style.display = visible ? 'none' : 'block';
+    }
+
+    function showError(message) {
+      const errorEl = document.getElementById('error');
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+      setLoading(false);
+    }
+
+    // 初始化流程：檢查登入狀態後載入樹
+    async function init() {
+      setLoading(true);
+      try {
+        const authResp = await fetch('/auth/me');
+        if (!authResp.ok) throw new Error('Failed to check authentication');
+        const authData = await authResp.json();
+        renderAuthStatus(authData.authenticated, authData.user);
+
+        if (!authData.authenticated) {
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('content').style.display = 'none';
+          return;
+        }
+
+        const treeResp = await fetch('/contacts/tree');
+        if (!treeResp.ok) throw new Error('Failed to load contacts');
+        const treeData = await treeResp.json();
+        state.treeRoot = treeData;
+        initializeTree(treeData);
+        setLoading(false);
+      } catch (err) {
+        console.error(err);
+        showError('Failed to load data. Please try again later or contact the administrator.');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
 </body>
 </html>
