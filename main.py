@@ -101,7 +101,7 @@ async def health(request: Request):
         token_data = auth_data.get("token") if isinstance(auth_data.get("token"), dict) else auth_data
         access_token = token_data.get("access_token") if isinstance(token_data, dict) else None
         graph_ok = await ping_graph(access_token=access_token)
-        result["graph"] = "ok" if graph_ok else "fail"
+        result["graph"] = "ok" if graph_ok else "fail: graph check failed"
     except Exception as exc:  # pragma: no cover - 以日誌協助偵錯
         result["graph"] = f"fail: {exc}"
 
