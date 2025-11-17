@@ -2,33 +2,495 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>公司通訊錄 Demo</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>公司通訊錄</title>
   <!-- 在 Outlook 中才會載入 office.js，純瀏覽器開也不會壞掉 -->
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" async></script>
+  <style>
+    :root {
+      --bg: #f7f7f9;
+      --card-bg: #fff;
+      --border: #e0e0e0;
+      --text: #1f1f1f;
+      --muted: #6b7280;
+      --accent: #0f6cbd;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", "Noto Sans TC", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    #app {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 16px 14px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .status a.button {
+      background: var(--accent);
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 12px 14px;
+      box-shadow: 0 1px 3px rgba(15, 15, 15, 0.08);
+    }
+
+    .section-title {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .search-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #search-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    #tree-container {
+      max-height: 360px;
+      overflow: auto;
+      padding: 8px 4px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    details.tree-node {
+      border-left: 3px solid #d7e3f4;
+      padding-left: 8px;
+      margin: 4px 0;
+    }
+
+    details.tree-node summary {
+      cursor: pointer;
+      list-style: none;
+      font-weight: 600;
+      color: #0f2940;
+    }
+
+    details.tree-node summary::-webkit-details-marker { display: none; }
+
+    details.tree-node.campus summary { color: #0f6cbd; }
+    details.tree-node.dept summary { color: #1f4b99; }
+
+    .employee-row {
+      padding: 8px 10px;
+      margin: 4px 0;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .employee-row:hover { background: #f1f5f9; }
+    .employee-row.selected {
+      background: #e8f2ff;
+      border-color: #b8d3ff;
+    }
+
+    .employee-name {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .employee-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 2px 0 0;
+    }
+
+    #search-results {
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px;
+    }
+
+    .search-header {
+      font-size: 13px;
+      font-weight: 700;
+      margin: 0 0 8px;
+    }
+
+    .search-result-row {
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .search-result-row:hover { background: #f1f5f9; }
+
+    #detail-panel {
+      min-height: 160px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #detail-panel .name {
+      font-size: 20px;
+      font-weight: 800;
+      margin: 0;
+    }
+
+    #detail-panel .ename {
+      font-size: 14px;
+      color: var(--muted);
+      margin: -4px 0 4px;
+    }
+
+    #detail-panel .info-line {
+      font-size: 14px;
+      margin: 2px 0;
+    }
+
+    #detail-panel .label {
+      color: var(--muted);
+      margin-right: 4px;
+    }
+
+    .contact-actions { display: flex; align-items: center; gap: 8px; }
+
+    .small-button {
+      padding: 6px 10px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .muted-text { color: var(--muted); font-size: 13px; }
+
+    .message-box {
+      background: #fff7ed;
+      border: 1px solid #f4c7a1;
+      color: #9a3412;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
   <div id="app">
     <header>
-      <h1>公司通訊錄 Demo Preview</h1>
-      <p>這是從中繼資料庫透過 FastAPI 取得的組織樹與人員資訊。</p>
-      <!-- 搜尋欄位可以先留著，功能之後再補 -->
-      <input id="search-input" placeholder="搜尋姓名 / 部門 / 職稱（demo 未實作）" />
+      <h1>公司通訊錄</h1>
+      <div class="status" id="status">載入中…</div>
     </header>
 
-    <main class="layout">
-      <section id="contacts-tree" class="tree">
-        <!-- JS 會動態把樹插在這裡 -->
-        <ul></ul>
-      </section>
+    <section class="panel">
+      <h2 class="section-title">搜尋與組織樹</h2>
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="搜尋姓名、部門或 Email" aria-label="搜尋通訊錄" />
+        <div id="search-results" hidden></div>
+        <div id="tree-container" aria-live="polite">
+          <div class="muted-text">載入中…</div>
+        </div>
+        <div class="message-box" id="error-box" hidden></div>
+      </div>
+    </section>
 
-      <section id="details-box" class="details">
-        <h2>人員詳細資訊</h2>
-        <p>請從左側樹狀清單選擇一個人員。</p>
-      </section>
-    </main>
+    <section class="panel">
+      <h2 class="section-title">詳細資訊</h2>
+      <div id="detail-panel" class="muted-text">請選擇一位同事。</div>
+    </section>
   </div>
 
-  <script src="/static/script.js"></script>
+  <script>
+    const statusEl = document.getElementById('status');
+    const treeContainer = document.getElementById('tree-container');
+    const detailPanel = document.getElementById('detail-panel');
+    const searchInput = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+    const errorBox = document.getElementById('error-box');
+
+    const employeeMap = new Map();
+    const rowMap = new Map();
+
+    function setStatus(text, options = {}) {
+      statusEl.textContent = text;
+      if (options.link) {
+        const link = document.createElement('a');
+        link.href = options.link.href;
+        link.textContent = options.link.label;
+        link.className = 'button';
+        link.style.marginLeft = '8px';
+        statusEl.appendChild(link);
+      }
+    }
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.hidden = false;
+    }
+
+    function clearError() {
+      errorBox.hidden = true;
+      errorBox.textContent = '';
+    }
+
+    function createEmployeeRow(node) {
+      const div = document.createElement('div');
+      div.className = 'employee-row';
+      div.dataset.key = node.key;
+
+      const name = document.createElement('p');
+      name.className = 'employee-name';
+      name.textContent = node.data?.name || node.label;
+
+      const meta = document.createElement('p');
+      meta.className = 'employee-meta';
+      const parts = [node.data?.dept_name, node.data?.title, node.data?.ext ? `分機 ${node.data.ext}` : null]
+        .filter(Boolean)
+        .join('｜');
+      meta.textContent = parts || '—';
+
+      div.appendChild(name);
+      div.appendChild(meta);
+      div.addEventListener('click', () => {
+        showEmployeeDetails(node);
+        highlightSelection(node.key);
+      });
+
+      rowMap.set(node.key, div);
+      return div;
+    }
+
+    function renderNode(node) {
+      if (node.node_type === 'employee') {
+        return createEmployeeRow(node);
+      }
+
+      const details = document.createElement('details');
+      details.className = `tree-node ${node.node_type}`;
+      details.open = true;
+
+      const summary = document.createElement('summary');
+      summary.textContent = node.label;
+      details.appendChild(summary);
+
+      if (Array.isArray(node.children)) {
+        node.children.forEach(child => {
+          const childEl = renderNode(child);
+          if (childEl) details.appendChild(childEl);
+        });
+      }
+
+      return details;
+    }
+
+    function renderTree(nodes) {
+      treeContainer.innerHTML = '';
+      rowMap.clear();
+
+      const fragment = document.createDocumentFragment();
+      nodes.forEach(node => {
+        const el = renderNode(node);
+        if (el) fragment.appendChild(el);
+      });
+
+      treeContainer.appendChild(fragment);
+    }
+
+    function showEmployeeDetails(node) {
+      if (!node || node.node_type !== 'employee' || !node.data) return;
+      const data = node.data;
+
+      const emailLink = data.email
+        ? `<a href="mailto:${data.email}">${data.email}</a>`
+        : '<span class="muted-text">無電子郵件</span>';
+      const phoneLine = [data.phone_no, data.ext ? `#${data.ext}` : null].filter(Boolean).join(' ');
+      const mobileLine = data.mobile_phone || '';
+
+      detailPanel.classList.remove('muted-text');
+      detailPanel.innerHTML = `
+        <p class="name">${data.name || ''}</p>
+        ${data.ename ? `<p class="ename">${data.ename}</p>` : ''}
+        <p class="info-line"><span class="label">部門</span>${data.dept_name || data.dept_id || '—'}</p>
+        <p class="info-line"><span class="label">職稱</span>${data.title || data.job || '—'}</p>
+        <p class="info-line"><span class="label">校區</span>${data.campus || '—'}</p>
+        <div class="info-line contact-actions">
+          <span class="label">Email</span>${emailLink}
+          ${data.email ? `<button class="small-button" type="button" data-email="${data.email}">複製</button>` : ''}
+        </div>
+        <p class="info-line"><span class="label">公司電話</span>${phoneLine || '—'}</p>
+        <p class="info-line"><span class="label">手機</span>${mobileLine || '—'}</p>
+      `;
+
+      const copyBtn = detailPanel.querySelector('button[data-email]');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', async () => {
+          const email = copyBtn.getAttribute('data-email');
+          try {
+            if (navigator.clipboard?.writeText) {
+              await navigator.clipboard.writeText(email);
+              copyBtn.textContent = '已複製';
+              setTimeout(() => (copyBtn.textContent = '複製'), 1200);
+            } else {
+              window.prompt('請手動複製：', email);
+            }
+          } catch (err) {
+            console.error('Clipboard failed', err);
+            window.prompt('請手動複製：', email);
+          }
+        });
+      }
+    }
+
+    function flattenEmployees(nodes, acc = []) {
+      nodes.forEach(node => {
+        if (node.node_type === 'employee') {
+          acc.push(node);
+        }
+        if (Array.isArray(node.children) && node.children.length) {
+          flattenEmployees(node.children, acc);
+        }
+      });
+      return acc;
+    }
+
+    function setupSearch(employees) {
+      searchInput.addEventListener('input', () => {
+        const keyword = searchInput.value.trim().toLowerCase();
+        if (!keyword) {
+          searchResults.hidden = true;
+          treeContainer.hidden = false;
+          searchResults.innerHTML = '';
+          return;
+        }
+
+        const matches = employees.filter(emp => {
+          const { name, ename, dept_name, email, title, campus } = emp.data || {};
+          return [name, ename, dept_name, email, title, campus]
+            .filter(Boolean)
+            .some(value => value.toLowerCase().includes(keyword));
+        });
+
+        searchResults.hidden = false;
+        treeContainer.hidden = true;
+        searchResults.innerHTML = '';
+
+        const header = document.createElement('div');
+        header.className = 'search-header';
+        header.textContent = `搜尋結果（${matches.length} 筆）`;
+        searchResults.appendChild(header);
+
+        matches.forEach(node => {
+          const row = document.createElement('div');
+          row.className = 'search-result-row';
+          const extPart = node.data?.ext ? `｜分機 ${node.data.ext}` : '';
+          row.innerHTML = `
+            <div>${node.data?.name || node.label}</div>
+            <div class="employee-meta">${[node.data?.dept_name, node.data?.title].filter(Boolean).join('｜')}${extPart}${node.data?.campus ? `｜${node.data.campus}` : ''}</div>
+          `;
+          row.addEventListener('click', () => {
+            showEmployeeDetails(node);
+            highlightSelection(node.key);
+            const targetRow = rowMap.get(node.key);
+            if (targetRow) {
+              targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          });
+          searchResults.appendChild(row);
+        });
+      });
+    }
+
+    function highlightSelection(key) {
+      rowMap.forEach(row => row.classList.remove('selected'));
+      const active = rowMap.get(key);
+      if (active) active.classList.add('selected');
+    }
+
+    async function fetchJSON(url) {
+      const resp = await fetch(url, { credentials: 'include' });
+      if (!resp.ok) throw new Error(`Request failed: ${resp.status}`);
+      return resp.json();
+    }
+
+    async function init() {
+      try {
+        const auth = await fetchJSON('/auth/me');
+        if (!auth?.authenticated) {
+          setStatus('尚未登入', { link: { href: '/auth/login', label: '登入' } });
+          treeContainer.innerHTML = '<div class="muted-text">請先登入後查看通訊錄。</div>';
+          return;
+        }
+
+        setStatus(`已使用 ${auth.user?.display_name || auth.user?.email || '使用者'} 登入`);
+        clearError();
+
+        const tree = await fetchJSON('/contacts/tree');
+        employeeMap.clear();
+        const employees = flattenEmployees(Array.isArray(tree) ? tree : []);
+        employees.forEach(emp => employeeMap.set(emp.key, emp));
+
+        renderTree(Array.isArray(tree) ? tree : []);
+        setupSearch(employees);
+        treeContainer.querySelector('.muted-text')?.remove();
+      } catch (err) {
+        console.error('載入失敗', err);
+        showError('載入失敗，請稍後再試或聯絡系統管理員。');
+        treeContainer.innerHTML = '<div class="muted-text">無法載入資料</div>';
+        setStatus('載入失敗');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
 </body>
 </html>

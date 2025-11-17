@@ -1,7 +1,7 @@
-# main.py
+"""主應用程式進入點。"""
+
 import logging
-import urllib.parse
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from auth_routes import router as auth_router
-from config import get_settings
+from config import get_database_url, get_settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,64 +36,152 @@ app.add_middleware(
 settings = get_settings()
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
-# 資料庫連線配置
-DB_CONFIG = {
-    "server": "qs db01-test",  # 或實際實例名稱，例如 'qs db01-test\\SQLEXPRESS'
-    "database": "address",
-    "username": "KCISweb_user",
-    "password": "0xeYzpQJF9",
-}
-
-
-# 建立資料庫 URL
-def get_database_url():
-    password_encoded = urllib.parse.quote_plus(DB_CONFIG["password"])
-    return (
-        f"mssql+pymssql://{DB_CONFIG['username']}:{password_encoded}"
-        f"@{DB_CONFIG['server']}/{DB_CONFIG['database']}"
-    )
-
-
 # 建立引擎與 Session
-engine = create_engine(get_database_url(), echo=False, connect_args={"charset": "utf8"})
+engine = create_engine(
+    get_database_url(settings), echo=False, connect_args={"charset": "utf8"}
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-class Contact(BaseModel):
+class EmployeePublic(BaseModel):
+    company_id: str
+    employee_id: str
     name: str
-    parent: Optional[str] = None
-    mail: str
+    ename: Optional[str] = None
+    email: Optional[str] = None
+    campus: Optional[str] = None
+    dept_id: Optional[str] = None
+    dept_name: Optional[str] = None
+    title: Optional[str] = None
+    job: Optional[str] = None
+    phone_no: Optional[str] = None
+    mobile_phone: Optional[str] = None
+    ext: Optional[str] = None
+    status: Optional[str] = None
 
 
 class TreeNode(BaseModel):
-    name: str
-    mail: str
+    key: str
+    label: str
+    node_type: Literal["company", "campus", "dept", "employee"]
     children: List["TreeNode"] = Field(default_factory=list)
+    data: Optional[EmployeePublic] = None
 
 
-TreeNode.update_forward_refs()
+TreeNode.update_forward_refs(EmployeePublic=EmployeePublic, TreeNode="TreeNode")
 
 
-def build_tree(contacts: List[Contact], root_name: str = None) -> List[TreeNode]:
-    # 建立節點字典
-    node_dict = {}
-    for contact in contacts:
-        node_dict[contact.name] = TreeNode(
-            name=contact.name,
-            mail=contact.mail,
+def build_tree_from_employees(employees: List[EmployeePublic]) -> List[TreeNode]:
+    """依照公司→校區→部門→員工的階層組成樹狀資料。"""
+
+    company_node = TreeNode(
+        key="company:KH",
+        label="Company",
+        node_type="company",
+        children=[],
+    )
+
+    campus_map: dict[str, TreeNode] = {}
+    dept_map: dict[tuple[str, str], TreeNode] = {}
+
+    for employee in employees:
+        campus_value = employee.campus or "Unknown"
+        campus_key = f"campus:{campus_value}"
+        if campus_key not in campus_map:
+            campus_node = TreeNode(
+                key=campus_key,
+                label=campus_value,
+                node_type="campus",
+                children=[],
+            )
+            campus_map[campus_key] = campus_node
+            company_node.children.append(campus_node)
+
+        campus_node = campus_map[campus_key]
+
+        dept_id_value = employee.dept_id or "Unknown"
+        dept_key = (campus_value, dept_id_value)
+        if dept_key not in dept_map:
+            dept_label = employee.dept_name or dept_id_value
+            dept_node = TreeNode(
+                key=f"dept:{campus_value}:{dept_id_value}",
+                label=dept_label,
+                node_type="dept",
+                children=[],
+            )
+            dept_map[dept_key] = dept_node
+            campus_node.children.append(dept_node)
+
+        dept_node = dept_map[dept_key]
+
+        employee_node = TreeNode(
+            key=f"emp:{employee.employee_id}",
+            label=employee.name,
+            node_type="employee",
             children=[],
+            data=employee,
         )
+        dept_node.children.append(employee_node)
 
-    # 建立樹狀結構
-    roots = []
-    for contact in contacts:
-        if contact.parent is None or contact.parent == "":
-            roots.append(node_dict[contact.name])
-        else:
-            if contact.parent in node_dict:
-                node_dict[contact.parent].children.append(node_dict[contact.name])
+    return [company_node]
 
-    return roots if not root_name else [node_dict[root_name]] if root_name in node_dict else []
+
+def find_node_by_key(nodes: List[TreeNode], key: str) -> Optional[TreeNode]:
+    for node in nodes:
+        if node.key == key:
+            return node
+        found = find_node_by_key(node.children, key)
+        if found:
+            return found
+    return None
+
+
+def fetch_active_employees(db) -> List[EmployeePublic]:
+    query = text(
+        """
+        SELECT
+            CompanyID,
+            EmployeeID,
+            Name,
+            EName,
+            Email,
+            Campus,
+            DeptID,
+            DeptName,
+            Title,
+            Job,
+            PHONE_NO,
+            MOBILE_PHONE,
+            EXT,
+            Status
+        FROM dbo.Interinfo_Member
+        WHERE Status = :status
+        """
+    )
+
+    result = db.execute(query, {"status": "在職"})
+    rows = result.fetchall()
+
+    employees = [
+        EmployeePublic(
+            company_id=row[0],
+            employee_id=row[1],
+            name=row[2],
+            ename=row[3],
+            email=row[4],
+            campus=row[5],
+            dept_id=row[6],
+            dept_name=row[7],
+            title=row[8],
+            job=row[9],
+            phone_no=row[10],
+            mobile_phone=row[11],
+            ext=row[12],
+            status=row[13],
+        )
+        for row in rows
+    ]
+    return employees
 
 
 # -----------------------
@@ -141,10 +229,8 @@ async def health():
 async def get_contacts_tree():
     db = SessionLocal()
     try:
-        result = db.execute(text("SELECT name, parent, mail FROM addresslist"))
-        rows = result.fetchall()
-        contacts = [Contact(name=row[0], parent=row[1], mail=row[2]) for row in rows]
-        tree = build_tree(contacts)
+        employees = fetch_active_employees(db)
+        tree = build_tree_from_employees(employees)
         return tree
     except Exception as e:
         logger.error(f"get_contacts_tree failed: {e}")
@@ -157,11 +243,10 @@ async def get_contacts_tree():
 async def get_contacts_subtree(root_name: str):
     db = SessionLocal()
     try:
-        result = db.execute(text("SELECT name, parent, mail FROM addresslist"))
-        rows = result.fetchall()
-        contacts = [Contact(name=row[0], parent=row[1], mail=row[2]) for row in rows]
-        subtree = build_tree(contacts, root_name)
-        return subtree[0] if subtree else {}
+        employees = fetch_active_employees(db)
+        tree = build_tree_from_employees(employees)
+        subtree = find_node_by_key(tree, root_name)
+        return subtree or {}
     except Exception as e:
         logger.error(f"get_contacts_subtree failed for {root_name}: {e}")
         raise HTTPException(status_code=500, detail="Failed to load contacts subtree")
@@ -173,21 +258,51 @@ async def get_contacts_subtree(root_name: str):
 async def get_employee(mail: str = Query(..., description="員工 Email")):
     db = SessionLocal()
     try:
-        result = db.execute(
-            text("SELECT name, parent, mail FROM addresslist WHERE mail = :mail"),
-            {"mail": mail},
+        query = text(
+            """
+            SELECT
+                CompanyID,
+                EmployeeID,
+                Name,
+                EName,
+                Email,
+                Campus,
+                DeptID,
+                DeptName,
+                Title,
+                Job,
+                PHONE_NO,
+                MOBILE_PHONE,
+                EXT,
+                Status
+            FROM dbo.Interinfo_Member
+            WHERE Email = :email AND Status = :status
+            """
         )
-        row = result.fetchone()
+        row = db.execute(query, {"email": mail, "status": "在職"}).fetchone()
 
         if not row:
             raise HTTPException(status_code=404, detail="Employee not found")
 
-        logger.info(f"get_employee: {mail} -> {row[0]}")
-        return {
-            "name": row[0],
-            "parent": row[1],
-            "mail": row[2],
-        }
+        employee = EmployeePublic(
+            company_id=row[0],
+            employee_id=row[1],
+            name=row[2],
+            ename=row[3],
+            email=row[4],
+            campus=row[5],
+            dept_id=row[6],
+            dept_name=row[7],
+            title=row[8],
+            job=row[9],
+            phone_no=row[10],
+            mobile_phone=row[11],
+            ext=row[12],
+            status=row[13],
+        )
+
+        logger.info(f"get_employee: {mail} -> {employee.name}")
+        return employee
     except HTTPException:
         raise
     except Exception as e:
@@ -207,10 +322,8 @@ async def get_protected_contacts_tree(current_user=Depends(get_current_user)):
     """
     db = SessionLocal()
     try:
-        result = db.execute(text("SELECT name, parent, mail FROM addresslist"))
-        rows = result.fetchall()
-        contacts = [Contact(name=row[0], parent=row[1], mail=row[2]) for row in rows]
-        tree = build_tree(contacts)
+        employees = fetch_active_employees(db)
+        tree = build_tree_from_employees(employees)
         return {
             "current_user": current_user,
             "tree": tree,
