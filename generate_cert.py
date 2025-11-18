@@ -1,23 +1,29 @@
+"""產生本機開發用的自簽憑證 (server.pem/server.key + ca.pem)。"""
+
 import trustme
-import os
 
-# 创建证书颁发机构
-ca = trustme.CA()
+def main():
+    # 建立一個假的 CA（信任來源）
+    ca = trustme.CA()
 
-# 为localhost创建证书
-server_cert = ca.issue_cert("localhost", "127.0.0.1", "::1")
+    # 簽發給 localhost / 127.0.0.1 用的伺服器憑證
+    server_cert = ca.issue_cert("localhost", "127.0.0.1")
 
-# 保存证书和私钥
-os.makedirs("ssl", exist_ok=True)
+    # 檔案名稱
+    ca_cert_path = "ca.pem"
+    cert_path = "server.pem"
+    key_path = "server.key"
 
-# 保存CA证书
-ca.cert_pem.write_to_path("ssl/ca.pem")
+    # 寫出檔案
+    ca.cert_pem.write_to_path(ca_cert_path)
+    server_cert.cert_chain_pems[0].write_to_path(cert_path)
+    server_cert.private_key_pem.write_to_path(key_path)
 
-# 保存服务器证书和私钥
-server_cert.private_key_pem.write_to_path("ssl/key.pem")
-server_cert.cert_chain_pems[0].write_to_path("ssl/cert.pem")
+    print("已產生憑證檔案：")
+    print(f"  CA 憑證：{ca_cert_path}")
+    print(f"  伺服器憑證：{cert_path}")
+    print(f"  私鑰：{key_path}")
+    print("請將 ca.pem 匯入 Windows 信任的根憑證機構。")
 
-print("证书已生成:")
-print("- CA证书: ssl/ca.pem")
-print("- 服务器私钥: ssl/key.pem")
-print("- 服务器证书: ssl/cert.pem")
+if __name__ == "__main__":
+    main()

@@ -1,501 +1,665 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Company Directory</title>
-  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" async></script>
-  <style>
-    :root {
-      --bg: #f7f7f9;
-      --card-bg: #fff;
-      --border: #e0e0e0;
-      --text: #1f1f1f;
-      --muted: #6b7280;
-      --accent: #0f6cbd;
-      --accent-soft: #eef5ff;
-      --error: #b42318;
-    }
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <title>公司通訊錄</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    * { box-sizing: border-box; }
+    <!-- Task pane 裡會以 iframe 顯示，設計成左右分欄 UI -->
+    <style>
+      :root {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        color-scheme: light;
+      }
 
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: "Segoe UI", "Noto Sans TC", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
+      * {
+        box-sizing: border-box;
+      }
 
-    #app {
-      max-width: 640px;
-      margin: 0 auto;
-      padding: 16px 14px 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
+      body {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        background: #f5f5f7;
+      }
 
-    header {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 8px;
-    }
+      header {
+        padding: 8px 12px;
+        background: #005fb8;
+        color: #ffffff;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
 
-    header h1 {
-      font-size: 1.2rem;
-      margin: 0;
-    }
+      header .title {
+        font-weight: 600;
+      }
 
-    .status-line {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--muted);
-      font-size: 0.95rem;
-      flex-wrap: wrap;
-    }
+      header .env {
+        font-size: 11px;
+        opacity: 0.8;
+      }
 
-    .btn-link {
-      padding: 6px 10px;
-      border-radius: 6px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      text-decoration: none;
-      font-size: 0.95rem;
-      cursor: pointer;
-    }
+      main {
+        flex: 1;
+        display: flex;
+        height: calc(100vh - 40px);
+      }
 
-    .btn-link.secondary {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text);
-    }
+      /* 左側：樹狀結構 + 搜尋 */
+      .sidebar {
+        width: 40%;
+        max-width: 360px;
+        min-width: 260px;
+        border-right: 1px solid #ddd;
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+      }
 
-    #search-area {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+      .search-box {
+        padding: 8px;
+        border-bottom: 1px solid #eee;
+      }
 
-    #search-input {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 1rem;
-    }
+      .search-box input {
+        width: 100%;
+        padding: 6px 8px;
+        font-size: 13px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+      }
 
-    #tree-container {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px 12px;
-      max-height: 440px;
-      overflow-y: auto;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
+      .tree-container {
+        flex: 1;
+        overflow: auto;
+        padding: 8px;
+      }
 
-    details.tree-node {
-      margin-left: 12px;
-      padding: 4px 0;
-    }
+      ul.tree-root,
+      ul.tree-children {
+        list-style: none;
+        padding-left: 0;
+        margin: 0;
+      }
 
-    details.tree-node > summary {
-      cursor: pointer;
-      font-weight: 600;
-      color: var(--text);
-    }
+      li.tree-node {
+        margin: 2px 0;
+      }
 
-    .employee-row {
-      padding: 8px 10px;
-      border-radius: 8px;
-      margin: 4px 0 4px 12px;
-      background: transparent;
-      transition: background 0.15s ease, border-color 0.15s ease;
-      border: 1px solid transparent;
-      cursor: pointer;
-    }
+      .tree-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 6px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+      }
 
-    .employee-row:hover,
-    .employee-row.active {
-      background: var(--accent-soft);
-      border-color: var(--accent);
-    }
+      .tree-label:hover {
+        background: #f0f4ff;
+      }
 
-    .employee-row .name {
-      font-weight: 600;
-      font-size: 1rem;
-      color: var(--text);
-    }
+      .tree-label .badge {
+        font-size: 10px;
+        padding: 0 4px;
+        border-radius: 3px;
+        background: #e5f0ff;
+        color: #245ea8;
+        flex-shrink: 0;
+      }
 
-    .employee-row .meta {
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
+      .tree-label .name {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
 
-    #search-results {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px 10px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
+      li.tree-node.employee .tree-label {
+        padding-left: 14px;
+      }
 
-    .search-result-row {
-      padding: 8px 6px;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.15s ease;
-    }
+      li.tree-node.employee.selected .tree-label {
+        background: #e3f2fd;
+        outline: 1px solid #90caf9;
+      }
 
-    .search-result-row:hover {
-      background: var(--accent-soft);
-    }
+      li.collapsed > ul.tree-children {
+        display: none;
+      }
 
-    #detail-panel {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    }
+      /* 右側：詳細資訊 */
+      .detail-pane {
+        flex: 1;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
 
-    #detail-panel h2 {
-      margin: 0 0 4px 0;
-      font-size: 1.25rem;
-    }
+      .detail-card {
+        background: #ffffff;
+        border-radius: 6px;
+        padding: 10px 12px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+        font-size: 13px;
+      }
 
-    #detail-panel .muted {
-      color: var(--muted);
-      margin: 2px 0;
-    }
+      .detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+      }
 
-    #detail-panel .contact-item {
-      margin: 6px 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      word-break: break-all;
-    }
+      .detail-name {
+        font-size: 15px;
+        font-weight: 600;
+      }
 
-    .tag {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 6px;
-      background: var(--accent-soft);
-      color: var(--accent);
-      font-size: 0.85rem;
-    }
+      .detail-title {
+        font-size: 12px;
+        color: #555;
+      }
 
-    .helper-text {
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
+      .detail-meta,
+      .detail-contact {
+        display: grid;
+        grid-template-columns: minmax(80px, 120px) 1fr;
+        row-gap: 4px;
+        column-gap: 8px;
+      }
 
-    .error-text {
-      color: var(--error);
-      font-size: 0.95rem;
-    }
-  </style>
-</head>
-<body>
-  <div id="app">
+      .detail-label {
+        color: #777;
+        font-size: 12px;
+      }
+
+      .detail-value {
+        font-size: 13px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: #f3f4f6;
+        font-size: 11px;
+        color: #555;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: #777;
+      }
+
+      .empty-state {
+        font-size: 13px;
+        color: #666;
+        text-align: center;
+        margin-top: 40px;
+      }
+
+      .section-title {
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: #444;
+      }
+
+      .btn-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 4px;
+      }
+
+      button {
+        border: none;
+        border-radius: 4px;
+        font-size: 12px;
+        padding: 4px 8px;
+        cursor: pointer;
+        background: #005fb8;
+        color: #fff;
+      }
+
+      button.secondary {
+        background: #e5e7eb;
+        color: #111827;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      @media (max-width: 800px) {
+        main {
+          flex-direction: column;
+        }
+
+        .sidebar {
+          width: 100%;
+          max-width: none;
+          min-width: 0;
+          height: 45%;
+        }
+
+        .detail-pane {
+          height: 55%;
+          border-top: 1px solid #ddd;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
     <header>
-      <h1>Company Directory</h1>
-      <div class="status-line" id="auth-status">Loading...</div>
+      <div class="title">公司通訊錄</div>
+      <div class="env">本機開發環境 · 連線至 FastAPI /contacts</div>
     </header>
 
-    <div id="loading">Loading data...</div>
-    <div id="error" class="error-text" style="display:none"></div>
+    <main>
+      <!-- 左側：樹 + 搜尋 -->
+      <section class="sidebar">
+        <div class="search-box">
+          <input
+            id="searchInput"
+            type="text"
+            placeholder="搜尋姓名或部門關鍵字..."
+          />
+        </div>
+        <div class="tree-container">
+          <ul id="treeRoot" class="tree-root"></ul>
+        </div>
+      </section>
 
-    <div id="content" style="display:none">
-      <div id="search-area">
-        <input type="text" id="search-input" placeholder="Search by name, department, or email" />
-        <div id="search-results" style="display:none"></div>
-      </div>
+      <!-- 右側：詳細資訊 -->
+      <section class="detail-pane">
+        <div id="emptyState" class="empty-state">
+          請從左側樹狀清單中選擇一位員工，即可在此查看詳細資訊。
+        </div>
 
-      <div id="tree-container"></div>
+        <div id="detailCard" class="detail-card" style="display: none">
+          <div class="detail-header">
+            <div>
+              <div id="detailName" class="detail-name"></div>
+              <div id="detailTitle" class="detail-title"></div>
+            </div>
+            <div id="detailStatus" class="pill"></div>
+          </div>
 
-      <div id="detail-panel">
-        <div class="helper-text" id="detail-placeholder">Select a colleague to view details.</div>
-      </div>
-    </div>
-  </div>
+          <div class="section">
+            <div class="section-title">基本資訊</div>
+            <div class="detail-meta">
+              <div class="detail-label">公司</div>
+              <div id="detailCompany" class="detail-value"></div>
 
-  <script>
-    // 將所有需要的節點儲存在記憶體，方便搜尋與細節顯示
-    const state = {
-      employeesFlat: [],
-      employeeMap: new Map(),
-      activeEmployeeKey: null,
-      treeRoot: [],
-    };
+              <div class="detail-label">校區 / 單位</div>
+              <div id="detailCampus" class="detail-value"></div>
 
-    // 建立搜尋結果區塊
-    function renderSearchResults(keyword) {
-      const resultsEl = document.getElementById('search-results');
-      if (!keyword) {
-        resultsEl.style.display = 'none';
-        resultsEl.innerHTML = '';
-        document.getElementById('tree-container').style.display = 'block';
-        return;
+              <div class="detail-label">部門</div>
+              <div id="detailDeptName" class="detail-value"></div>
+
+              <div class="detail-label">職稱</div>
+              <div id="detailJob" class="detail-value"></div>
+
+              <div class="detail-label">員工編號</div>
+              <div id="detailEmployeeId" class="detail-value"></div>
+
+              <div class="detail-label">分機</div>
+              <div id="detailExt" class="detail-value"></div>
+            </div>
+          </div>
+
+          <div class="section" style="margin-top: 8px">
+            <div class="section-title">聯絡方式（點選員工才會顯示）</div>
+            <div class="detail-contact">
+              <div class="detail-label">Email</div>
+              <div id="detailEmail" class="detail-value"></div>
+
+              <div class="detail-label">辦公室電話</div>
+              <div id="detailPhoneNo" class="detail-value"></div>
+
+              <div class="detail-label">手機</div>
+              <div id="detailMobile" class="detail-value"></div>
+            </div>
+            <div class="hint" style="margin-top: 4px">
+              出於隱私考量，通訊錄只在選定員工時顯示完整聯絡資訊。
+            </div>
+          </div>
+
+          <!-- 未來要接 Office.js 的話，可以在這裡加「加入收件人」按鈕 -->
+          <div class="section" style="margin-top: 8px">
+            <div class="section-title">Outlook 操作</div>
+            <div class="btn-row">
+              <button id="btnAddTo" disabled>加入收件人 (To)</button>
+              <button id="btnAddCc" class="secondary" disabled>
+                加入副本 (Cc)
+              </button>
+            </div>
+            <div class="hint">
+              目前僅顯示 UI，之後可接上 Office.js 將選定員工加入郵件收件人欄位。
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 若未來要啟用 Office.js，可取消註解 -->
+    <!-- <script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script> -->
+
+    <script>
+      // ==========
+      // 資料模型說明（對應後端 EmployeePublic / TreeNode）
+      // ==========
+      /**
+       * 後端 EmployeePublic JSON 結構（對應 main.py 的 EmployeePublic）：
+       * {
+       *   "company_id": str,
+       *   "employee_id": str,
+       *   "name": str,
+       *   "ename": str | null,
+       *   "email": str | null,
+       *   "campus": str | null,
+       *   "dept_id": str | null,
+       *   "dept_name": str | null,
+       *   "title": str | null,
+       *   "job": str | null,
+       *   "phone_no": str | null,
+       *   "mobile_phone": str | null,
+       *   "ext": str | null,
+       *   "status": str | null
+       * }
+       *
+       * TreeNode 結構（對應 main.py 的 TreeNode）：
+       * {
+       *   "key": "company:KH" | "campus:xxx" | "dept:xxx:yyy" | "emp:123",
+       *   "label": "康軒" / "台北校區" / "資訊部" / "員工姓名",
+       *   "node_type": "company" | "campus" | "dept" | "employee",
+       *   "children": [TreeNode, ...],
+       *   "data": EmployeePublic | null
+       * }
+       */
+
+      const API_BASE = ""; // 使用相對路徑，避免綁死 host/port
+
+      const state = {
+        fullTree: [],
+        filteredTree: [],
+        selectedEmployeeKey: null,
+      };
+
+      const treeRootEl = document.getElementById("treeRoot");
+      const searchInputEl = document.getElementById("searchInput");
+      const emptyStateEl = document.getElementById("emptyState");
+      const detailCardEl = document.getElementById("detailCard");
+
+      const detailNameEl = document.getElementById("detailName");
+      const detailTitleEl = document.getElementById("detailTitle");
+      const detailStatusEl = document.getElementById("detailStatus");
+      const detailCompanyEl = document.getElementById("detailCompany");
+      const detailCampusEl = document.getElementById("detailCampus");
+      const detailDeptNameEl = document.getElementById("detailDeptName");
+      const detailJobEl = document.getElementById("detailJob");
+      const detailEmployeeIdEl = document.getElementById("detailEmployeeId");
+      const detailExtEl = document.getElementById("detailExt");
+      const detailEmailEl = document.getElementById("detailEmail");
+      const detailPhoneNoEl = document.getElementById("detailPhoneNo");
+      const detailMobileEl = document.getElementById("detailMobile");
+
+      const btnAddTo = document.getElementById("btnAddTo");
+      const btnAddCc = document.getElementById("btnAddCc");
+
+      // ==========
+      // 初始化：載入樹狀資料
+      // ==========
+      async function loadContactsTree() {
+        try {
+          const res = await fetch(`${API_BASE}/contacts/tree`);
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          state.fullTree = data || [];
+          state.filteredTree = state.fullTree;
+          renderTree();
+        } catch (err) {
+          console.error("載入通訊錄樹狀結構失敗：", err);
+          treeRootEl.innerHTML =
+            '<li class="tree-node"><div class="tree-label">無法載入通訊錄，請稍後再試。</div></li>';
+        }
       }
 
-      const lower = keyword.toLowerCase();
-      const filtered = state.employeesFlat.filter(({ data }) => {
-        if (!data) return false;
-        return (
-          (data.name && data.name.toLowerCase().includes(lower)) ||
-          (data.ename && data.ename.toLowerCase().includes(lower)) ||
-          (data.dept_name && data.dept_name.toLowerCase().includes(lower)) ||
-          (data.email && data.email.toLowerCase().includes(lower)) ||
-          (data.campus && data.campus.toLowerCase().includes(lower)) ||
-          (data.title && data.title.toLowerCase().includes(lower))
-        );
-      });
+      // ==========
+      // 樹狀 UI render
+      // ==========
+      function renderTree() {
+        treeRootEl.innerHTML = "";
+        const ul = document.createElement("ul");
+        ul.className = "tree-root";
 
-      resultsEl.style.display = 'block';
-      document.getElementById('tree-container').style.display = 'none';
+        const nodes = state.filteredTree || [];
+        nodes.forEach((node) => {
+          const li = createTreeNodeElement(node);
+          ul.appendChild(li);
+        });
 
-      const header = `<div class="helper-text">Search results (${filtered.length})</div>`;
-      const rows = filtered
-        .map((node) => {
-          const info = [];
-          if (node.data?.dept_name) info.push(node.data.dept_name);
-          if (node.data?.title) info.push(node.data.title);
-          if (node.data?.campus) info.push(node.data.campus);
-          return `
-            <div class="search-result-row" data-key="${node.key}">
-              <div class="name">${node.data?.name ?? node.label}</div>
-              <div class="meta">${info.join(' ｜ ')}</div>
-            </div>
-          `;
-        })
-        .join('');
+        treeRootEl.appendChild(ul);
+      }
 
-      resultsEl.innerHTML = header + (rows || '<div class="helper-text">No matches found.</div>');
+      function createTreeNodeElement(node) {
+        const li = document.createElement("li");
+        li.classList.add("tree-node", node.node_type);
 
-      resultsEl.querySelectorAll('.search-result-row').forEach((row) => {
-        row.addEventListener('click', () => {
-          const key = row.dataset.key;
-          const node = state.employeeMap.get(key);
-          if (node) {
-            highlightEmployee(key);
-            showEmployeeDetails(node);
-            scrollEmployeeIntoView(key);
+        const label = document.createElement("div");
+        label.className = "tree-label";
+
+        const badge = document.createElement("span");
+        badge.className = "badge";
+
+        switch (node.node_type) {
+          case "company":
+            badge.textContent = "公司";
+            break;
+          case "campus":
+            badge.textContent = "校區";
+            break;
+          case "dept":
+            badge.textContent = "部門";
+            break;
+          case "employee":
+            badge.textContent = "員工";
+            break;
+          default:
+            badge.textContent = node.node_type;
+        }
+
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "name";
+
+        if (node.node_type === "employee" && node.data) {
+          const title = node.data.title || node.data.job || "";
+          const dept = node.data.dept_name || "";
+          const ext = node.data.ext ? `分機 ${node.data.ext}` : "";
+          const parts = [node.data.name, dept, title, ext].filter(Boolean);
+          nameSpan.textContent = parts.join(" · ");
+        } else {
+          nameSpan.textContent = node.label;
+        }
+
+        label.appendChild(badge);
+        label.appendChild(nameSpan);
+
+        label.addEventListener("click", () => {
+          if (node.node_type === "employee" && node.data) {
+            state.selectedEmployeeKey = node.key;
+            highlightSelectedEmployee();
+            showEmployeeDetails(node.data);
+          } else {
+            li.classList.toggle("collapsed");
           }
         });
-      });
-    }
 
-    // 渲染樹狀資料
-    function renderTree(nodes, container) {
-      nodes.forEach((node) => {
-        if (node.node_type === 'company') {
-          renderTree(node.children || [], container);
-          return;
-        }
+        li.appendChild(label);
 
-        if (node.node_type === 'campus' || node.node_type === 'dept') {
-          const details = document.createElement('details');
-          details.className = `tree-node ${node.node_type}`;
-          details.open = true;
-
-          const summary = document.createElement('summary');
-          summary.textContent = node.label;
-          details.appendChild(summary);
-
-          renderTree(node.children || [], details);
-          container.appendChild(details);
-          return;
-        }
-
-      if (node.node_type === 'employee') {
-        const row = document.createElement('div');
-        row.className = 'employee-row';
-        row.dataset.key = node.key;
-
-        const metaParts = [];
-        if (node.data?.dept_name) metaParts.push(node.data.dept_name);
-        if (node.data?.title) metaParts.push(node.data.title);
-        if (node.data?.campus) metaParts.push(node.data.campus);
-
-        row.innerHTML = `
-          <div class="name">${node.data?.name ?? node.label}</div>
-          <div class="meta">${metaParts.join(' ｜ ')}</div>
-        `;
-
-          row.addEventListener('click', () => {
-            highlightEmployee(node.key);
-            showEmployeeDetails(node);
+        if (node.children && node.children.length > 0) {
+          const ul = document.createElement("ul");
+          ul.className = "tree-children";
+          node.children.forEach((child) => {
+            const childLi = createTreeNodeElement(child);
+            ul.appendChild(childLi);
           });
-
-          container.appendChild(row);
-          state.employeesFlat.push(node);
-          state.employeeMap.set(node.key, node);
+          li.appendChild(ul);
         }
-      });
-    }
 
-    // 高亮目前選取的員工
-    function highlightEmployee(key) {
-      if (state.activeEmployeeKey) {
-        document.querySelectorAll(`[data-key="${state.activeEmployeeKey}"]`).forEach((el) => el.classList.remove('active'));
+        return li;
       }
-      document.querySelectorAll(`[data-key="${key}"]`).forEach((el) => el.classList.add('active'));
-      state.activeEmployeeKey = key;
-    }
 
-    // 捲動到樹中的指定員工
-    function scrollEmployeeIntoView(key) {
-      const el = document.querySelector(`.employee-row[data-key="${key}"]`);
-      if (el && typeof el.scrollIntoView === 'function') {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      function highlightSelectedEmployee() {
+        const nodeEls = treeRootEl.querySelectorAll("li.tree-node.employee");
+        nodeEls.forEach((el) => el.classList.remove("selected"));
+
+        if (!state.selectedEmployeeKey) return;
+
+        const match = Array.from(nodeEls).find((el) =>
+          el.textContent.includes("")
+        );
+        // 這裡我們沒有直接在 DOM 綁 key，若要精準匹配可以之後加 data-key 屬性
       }
-    }
 
-    // 顯示員工詳細資訊
-    function showEmployeeDetails(node) {
-      if (!node || node.node_type !== 'employee') return;
-      const data = node.data || {};
-      const detailPanel = document.getElementById('detail-panel');
-      const phoneLine = data.phone_no ? `${data.phone_no}${data.ext ? ` #${data.ext}` : ''}` : '-';
-      const mobileLine = data.mobile_phone || '-';
-      const campusLine = data.campus || '-';
-      const deptLine = data.dept_name || '-';
-      const titleLine = data.title || data.job || '-';
+      // ==========
+      // 詳細資訊顯示
+      // ==========
+      function showEmployeeDetails(emp) {
+        if (!emp) return;
 
-      detailPanel.innerHTML = `
-        <h2>${data.name || node.label}</h2>
-        <div class="muted">${[deptLine !== '-' ? deptLine : null, titleLine !== '-' ? titleLine : null, campusLine !== '-' ? campusLine : null].filter(Boolean).join(' ｜ ') || '-'}</div>
-        <div class="contact-item">
-          <strong>Department:</strong>
-          <span>${deptLine}</span>
-        </div>
-        <div class="contact-item">
-          <strong>Title:</strong>
-          <span>${titleLine}</span>
-        </div>
-        <div class="contact-item">
-          <strong>Campus:</strong>
-          <span>${campusLine}</span>
-        </div>
-        <div class="contact-item">
-          <strong>Email:</strong>
-          ${data.email ? `<a href="mailto:${data.email}">${data.email}</a>` : '<span class="muted">Not available</span>'}
-          ${data.email ? `<button class="btn-link secondary" data-email="${data.email}" id="copy-email">Copy</button>` : ''}
-        </div>
-        <div class="contact-item">
-          <strong>Company Phone:</strong>
-          ${phoneLine !== '-' ? phoneLine : '<span class="muted">Not available</span>'}
-        </div>
-        <div class="contact-item">
-          <strong>Mobile:</strong>
-          ${mobileLine !== '-' ? mobileLine : '<span class="muted">Not available</span>'}
-        </div>
-      `;
+        emptyStateEl.style.display = "none";
+        detailCardEl.style.display = "block";
 
-      const copyBtn = document.getElementById('copy-email');
-      if (copyBtn) {
-        copyBtn.addEventListener('click', () => copyEmail(data.email));
+        detailNameEl.textContent = emp.name || "(未填寫姓名)";
+        const titleParts = [];
+        if (emp.title) titleParts.push(emp.title);
+        if (emp.job && emp.job !== emp.title) titleParts.push(emp.job);
+        detailTitleEl.textContent = titleParts.join(" · ") || "職稱未設定";
+
+        detailStatusEl.textContent = emp.status || "在職";
+        detailCompanyEl.textContent = emp.company_id || "—";
+        detailCampusEl.textContent = emp.campus || "—";
+        detailDeptNameEl.textContent = emp.dept_name || emp.dept_id || "—";
+        detailJobEl.textContent = emp.job || emp.title || "—";
+        detailEmployeeIdEl.textContent = emp.employee_id || "—";
+        detailExtEl.textContent = emp.ext || "—";
+
+        detailEmailEl.textContent = emp.email || "—";
+        detailPhoneNoEl.textContent = emp.phone_no || "—";
+        detailMobileEl.textContent = emp.mobile_phone || "—";
+
+        // 目前先只啟用 UI，不接 Office.js
+        const hasEmail = !!emp.email;
+        btnAddTo.disabled = !hasEmail;
+        btnAddCc.disabled = !hasEmail;
       }
-    }
 
-    // 複製電子郵件地址
-    function copyEmail(email) {
-      if (!email) return;
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(email).catch(() => fallbackCopy(email));
-      } else {
-        fallbackCopy(email);
-      }
-    }
-
-    // 簡易複製備援方案
-    function fallbackCopy(email) {
-      window.prompt('Copy email address:', email);
-    }
-
-    // 設定搜尋事件
-    function setupSearch() {
-      const input = document.getElementById('search-input');
-      input.addEventListener('input', (event) => {
-        const keyword = event.target.value.trim();
-        renderSearchResults(keyword);
-      });
-    }
-
-    // 渲染樹狀資料與初始化搜尋
-    function initializeTree(data) {
-      const container = document.getElementById('tree-container');
-      container.innerHTML = '';
-      state.employeesFlat = [];
-      state.employeeMap.clear();
-      renderTree(data, container);
-      setupSearch();
-    }
-
-    // 顯示登入狀態
-    function renderAuthStatus(authenticated, user) {
-      const statusEl = document.getElementById('auth-status');
-      statusEl.innerHTML = '';
-      if (!authenticated) {
-        statusEl.innerHTML = `
-          <span>Not signed in.</span>
-          <a class="btn-link" href="/auth/login">Sign in</a>
-        `;
-      } else {
-        const name = user?.displayName || user?.display_name || 'User';
-        const email = user?.mail || user?.email || user?.userPrincipalName || '';
-        statusEl.innerHTML = `Signed in as ${name}${email ? ` (${email})` : ''}`;
-      }
-    }
-
-    // 顯示載入與錯誤狀態
-    function setLoading(visible) {
-      document.getElementById('loading').style.display = visible ? 'block' : 'none';
-      document.getElementById('content').style.display = visible ? 'none' : 'block';
-    }
-
-    function showError(message) {
-      const errorEl = document.getElementById('error');
-      errorEl.textContent = message;
-      errorEl.style.display = 'block';
-      setLoading(false);
-    }
-
-    // 初始化流程：檢查登入狀態後載入樹
-    async function init() {
-      setLoading(true);
-      try {
-        const authResp = await fetch('/auth/me');
-        if (!authResp.ok) throw new Error('Failed to check authentication');
-        const authData = await authResp.json();
-        renderAuthStatus(authData.authenticated, authData.user);
-
-        if (!authData.authenticated) {
-          document.getElementById('loading').style.display = 'none';
-          document.getElementById('content').style.display = 'none';
+      // ==========
+      // 搜尋：依姓名/部門關鍵字做簡單 filter
+      // ==========
+      function filterTree(keyword) {
+        if (!keyword) {
+          state.filteredTree = state.fullTree;
+          renderTree();
           return;
         }
 
-        const treeResp = await fetch('/contacts/tree');
-        if (!treeResp.ok) throw new Error('Failed to load contacts');
-        const treeData = await treeResp.json();
-        state.treeRoot = treeData;
-        initializeTree(treeData);
-        setLoading(false);
-      } catch (err) {
-        console.error(err);
-        showError('Failed to load data. Please try again later or contact the administrator.');
-      }
-    }
+        const lower = keyword.toLowerCase();
 
-    document.addEventListener('DOMContentLoaded', init);
-  </script>
-</body>
+        function matchEmployee(emp) {
+          if (!emp) return false;
+          const fields = [
+            emp.name,
+            emp.ename,
+            emp.dept_name,
+            emp.job,
+            emp.title,
+            emp.campus,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return fields.includes(lower);
+        }
+
+        function filterNode(node) {
+          let childrenMatches = [];
+          if (Array.isArray(node.children)) {
+            childrenMatches = node.children
+              .map(filterNode)
+              .filter((n) => n !== null);
+          }
+
+          const selfMatches =
+            node.node_type === "employee" && matchEmployee(node.data);
+
+          if (selfMatches || childrenMatches.length > 0) {
+            return {
+              ...node,
+              children: childrenMatches,
+            };
+          }
+
+          // 校區/部門名稱本身也可以被搜尋
+          const labelText = (node.label || "").toLowerCase();
+          if (
+            (node.node_type === "campus" || node.node_type === "dept") &&
+            labelText.includes(lower)
+          ) {
+            return {
+              ...node,
+              children: childrenMatches,
+            };
+          }
+
+          return null;
+        }
+
+        state.filteredTree =
+          state.fullTree
+            .map(filterNode)
+            .filter((n) => n !== null) || [];
+        renderTree();
+      }
+
+      // ==========
+      // 事件綁定
+      // ==========
+      searchInputEl.addEventListener("input", (e) => {
+        const keyword = e.target.value.trim();
+        filterTree(keyword);
+      });
+
+      // 目前按鈕只做 UI 提示，之後可接 Office.js
+      btnAddTo.addEventListener("click", () => {
+        alert("未接 Office.js：未來可在此實作『加入收件人 (To)』功能。");
+      });
+
+      btnAddCc.addEventListener("click", () => {
+        alert("未接 Office.js：未來可在此實作『加入副本 (Cc)』功能。");
+      });
+
+      // ==========
+      // 啟動
+      // ==========
+      document.addEventListener("DOMContentLoaded", () => {
+        loadContactsTree();
+      });
+    </script>
+  </body>
 </html>

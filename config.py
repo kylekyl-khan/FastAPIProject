@@ -2,7 +2,7 @@
 此檔案負責集中管理應用程式設定，並提供資料庫連線字串等共用方法。
 所有設定皆由環境變數讀取，避免在程式碼中硬編碼敏感資訊。
 """
-
+import os
 import urllib.parse
 from functools import lru_cache
 import urllib.parse
