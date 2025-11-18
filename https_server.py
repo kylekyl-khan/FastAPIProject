@@ -1,17 +1,26 @@
-import uvicorn
+from __future__ import annotations
+
+"""啟動本地 HTTPS 反向代理，方便 Outlook Add-in 指向安全端點。"""
+
 import ssl
+
+import uvicorn
+
 from main import app
 
-if __name__ == "__main__":
-    # 配置SSL上下文
-    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ssl_context.load_cert_chain('ssl/cert.pem', 'ssl/key.pem')
-    
-    # 启动HTTPS服务器
+
+def run_https_server() -> None:
+    """使用既有憑證啟動 uvicorn HTTPS 服務。"""
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8443,
+        ssl_certfile="ssl/cert.pem",
         ssl_keyfile="ssl/key.pem",
-        ssl_certfile="ssl/cert.pem"
+        timeout_keep_alive=30,
     )
+
+
+if __name__ == "__main__":
+    run_https_server()

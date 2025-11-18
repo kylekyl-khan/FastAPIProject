@@ -1,213 +1,121 @@
-"""
-此檔案為 FastAPI 應用程式進入點，負責路由定義與中介層設定。
-保留既有 API 行為，同時整理程式架構與風格。
-"""
+from __future__ import annotations
+
+"""FastAPI 入口點，提供通訊錄樹狀 API 與健康檢查。"""
 
 import logging
+import traceback
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from auth_routes import router as auth_router
 from config import get_settings
-from database import get_db_session
-from graph_service import (
-    fetch_graph_users,
-    get_access_token_from_session,
-    map_graph_user_to_employee,
-)
-from models import build_tree_from_employees, find_node_by_key
+from graph_service import check_graph_health, fetch_employees_from_graph
+from models import EmployeePublic, TreeNode, build_tree_from_employees, find_node_by_key
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
 LOGGER = logging.getLogger("contacts")
 
 SETTINGS = get_settings()
 app = FastAPI()
-
-# 設定 CORS，維持與原始行為一致
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# 啟用 SessionMiddleware 以保存登入資訊
 app.add_middleware(SessionMiddleware, secret_key=SETTINGS.SECRET_KEY)
 
 
-# ---------------------------------------------------------------------------
-# 依賴注入與共用函式
-# ---------------------------------------------------------------------------
+async def fetch_active_employees() -> list[EmployeePublic]:
+    """以 Microsoft Graph 為主資料來源取得在職員工。"""
 
+    raw_users = await fetch_employees_from_graph()
+    employees: list[EmployeePublic] = []
+    for user in raw_users:
+        company_id = SETTINGS.COMPANY_ID or "KH"
+        employee_id = user.get("id") or user.get("userPrincipalName") or ""
+        email = user.get("mail") or user.get("userPrincipalName")
+        campus = user.get("companyName") or user.get("officeLocation")
+        dept_value = user.get("department")
+        job_title = user.get("jobTitle")
+        business_phones = user.get("businessPhones") or []
 
-def get_current_user(request: Request):
-    """
-    從 Session 取得目前登入使用者資訊，若未登入則拋出 401。
-    """
-
-    auth_data = request.session.get("auth") or {}
-    token_data = auth_data.get("token") if isinstance(auth_data.get("token"), dict) else auth_data
-    if not token_data.get("access_token"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return auth_data.get("user")
-
-
-async def _load_full_tree_from_graph(request: Request):
-    access_token = get_access_token_from_session(request)
-    users = await fetch_graph_users(access_token)
-    employees = [map_graph_user_to_employee(item) for item in users]
-    return build_tree_from_employees(employees)
-
-
-# ---------------------------------------------------------------------------
-# 基本測試與健康檢查路由
-# ---------------------------------------------------------------------------
+        employees.append(
+            EmployeePublic(
+                company_id=company_id,
+                employee_id=employee_id,
+                name=user.get("displayName") or email or employee_id,
+                email=email,
+                campus=campus,
+                dept_id=dept_value,
+                dept_name=dept_value,
+                title=job_title,
+                job=job_title,
+                phone_no=business_phones[0] if business_phones else None,
+                mobile_phone=user.get("mobilePhone"),
+                status="在職",
+            )
+        )
+    return employees
 
 
 @app.get("/")
-async def root():
-    """
-    回傳簡易訊息以確認服務運行。
-    """
+async def root() -> dict[str, str]:
+    """基本檢查入口。"""
 
     return {"message": "Hello World"}
 
 
-@app.get("/hello/{name}")
-async def say_hello(name: str):
-    """
-    以動態名稱回應問候訊息。
-    """
-
-    return {"message": f"Hello {name}"}
-
-
 @app.get("/health")
-async def health(db: Session = Depends(get_db_session)):
-    """
-    執行簡單查詢以檢查資料庫連線狀態。
-    """
+async def health() -> dict[str, str]:
+    """健康檢查，聚焦 Graph 連線狀態。"""
 
-    try:
-        db.execute(text("SELECT 1"))
-        return {"status": "ok"}
-    except Exception as exc:  # pragma: no cover - 以日誌協助偵錯
-        LOGGER.error("Health check failed: %s", exc)
-        raise HTTPException(status_code=500, detail="DB connection failed") from exc
-
-
-# ---------------------------------------------------------------------------
-# 通訊錄相關 API
-# ---------------------------------------------------------------------------
+    graph_status = await check_graph_health()
+    status_value = "ok" if graph_status.get("graph") == "ok" else "degraded"
+    return {"status": status_value, **graph_status}
 
 
 @app.get("/contacts/tree")
-async def get_contacts_tree(request: Request):
-    """
-    從 Microsoft Graph 讀取所有啟用使用者並組成公司層級樹狀結構。
-    """
+async def get_contacts_tree() -> list[TreeNode]:
+    """回傳完整的公司通訊錄樹狀結構。"""
 
     try:
-        tree = await _load_full_tree_from_graph(request)
+        employees = await fetch_active_employees()
+        tree = build_tree_from_employees(employees)
         return tree
     except HTTPException:
         raise
     except Exception as exc:  # pragma: no cover - 以日誌協助偵錯
         LOGGER.error("get_contacts_tree failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to load contacts tree") from exc
+        LOGGER.debug("Traceback: %s", traceback.format_exc())
+        raise HTTPException(status_code=500, detail="載入通訊錄資料時發生錯誤") from exc
 
 
-@app.get("/contacts/tree/{root_name}")
-async def get_contacts_subtree(root_name: str, request: Request):
-    """
-    取得指定節點的子樹，若找不到則回傳空物件。
-    """
+@app.get("/contacts/tree/{root_key}")
+async def get_contacts_subtree(root_key: str) -> TreeNode | dict:
+    """取得指定節點子樹，找不到時回傳空物件。"""
 
     try:
-        tree = await _load_full_tree_from_graph(request)
-        subtree = find_node_by_key(tree, root_name)
+        employees = await fetch_active_employees()
+        tree = build_tree_from_employees(employees)
+        subtree = find_node_by_key(tree, root_key)
         return subtree or {}
     except HTTPException:
         raise
     except Exception as exc:  # pragma: no cover
-        LOGGER.error("get_contacts_subtree failed for %s: %s", root_name, exc)
-        raise HTTPException(status_code=500, detail="Failed to load contacts subtree") from exc
-
-
-@app.get("/contacts/employee")
-async def get_employee(request: Request, mail: str = Query(..., description="Employee email")):
-    """
-    依電子郵件查詢單一員工的公開聯絡資訊。
-    """
-
-    try:
-        access_token = get_access_token_from_session(request)
-        users = await fetch_graph_users(access_token)
-        matched = None
-        for user in users:
-            mail_value = (user.get("mail") or "").lower()
-            upn_value = (user.get("userPrincipalName") or "").lower()
-            if mail.lower() == mail_value or mail.lower() == upn_value:
-                matched = user
-                break
-
-        if not matched:
-            raise HTTPException(status_code=404, detail="Employee not found")
-
-        employee = map_graph_user_to_employee(matched)
-        LOGGER.info("get_employee: %s -> %s", mail, employee.name)
-        return employee
-    except HTTPException:
-        raise
-    except Exception as exc:  # pragma: no cover
-        LOGGER.error("get_employee failed for %s: %s", mail, exc)
-        raise HTTPException(status_code=500, detail="Internal server error") from exc
-
-
-@app.get("/contacts/tree/protected-example")
-async def get_protected_contacts_tree(request: Request, current_user=Depends(get_current_user)):
-    """
-    示範受保護的樹狀查詢，需要先完成登入流程才能存取。
-    """
-
-    try:
-        tree = await _load_full_tree_from_graph(request)
-        return {"current_user": current_user, "tree": tree}
-    except HTTPException:
-        raise
-    except Exception as exc:  # pragma: no cover
-        LOGGER.error("get_protected_contacts_tree failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to load contacts tree") from exc
+        LOGGER.error("get_contacts_subtree failed for %s: %s", root_key, exc)
+        LOGGER.debug("Traceback: %s", traceback.format_exc())
+        raise HTTPException(status_code=500, detail="載入通訊錄子樹時發生錯誤") from exc
 
 
 @app.get("/contacts")
-async def contacts_page():
-    """
-    回傳通訊錄前端頁面。
-    """
+async def contacts_page() -> FileResponse:
+    """回傳通訊錄前端頁面。"""
 
     return FileResponse("./static/contacts.html")
 
 
 @app.get("/optimized-manifest.xml")
-async def optimized_manifest():
-    """
-    回傳 Outlook Add-in manifest 檔案。
-    """
+async def optimized_manifest() -> FileResponse:
+    """回傳 Outlook Add-in manifest 檔案。"""
 
     return FileResponse("./static/optimized-manifest.xml")
 
 
-# ---------------------------------------------------------------------------
-# 中介層與路由掛載
-# ---------------------------------------------------------------------------
-
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.include_router(auth_router)
