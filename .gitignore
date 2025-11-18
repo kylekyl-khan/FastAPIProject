@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment files
+.env
+.env.local
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# SSL / generated assets
+ssl/*.pem
+ssl/*.crt
+ssl/*.key
+
+# Node
+node_modules/

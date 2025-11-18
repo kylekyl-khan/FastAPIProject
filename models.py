@@ -6,6 +6,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from config import get_settings
+
 
 class EmployeePublic(BaseModel):
     """對外公開的員工聯絡資訊。"""
@@ -45,11 +47,13 @@ TreeNode.model_rebuild()
 
 
 def build_tree_from_employees(employees: list[EmployeePublic]) -> list[TreeNode]:
-    """公司 → 校區 → 部門 → 人員的樹狀結構。"""
+    """組成公司 → 校區 → 部門 → 人員的樹狀結構。"""
 
-    company_label = employees[0].company_id if employees else "康軒文教"
+    settings = get_settings()
+    company_label = settings.COMPANY_NAME or "公司"
+    company_key = f"company:{settings.COMPANY_ID or 'company'}"
     company_node = TreeNode(
-        key=f"company:{company_label}",
+        key=company_key,
         label=company_label,
         node_type="company",
         children=[],
